@@ -6,7 +6,7 @@ import io.agt.core.*;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-/** 框架 Memory 上下文桥；读写 ACL 将由后续治理适配器实现。 */
+/** 框架 Memory 上下文桥；只有显式绑定 DataResource 的 delegate 才实施读写 ACL。 */
 final class ContextChatMemory implements ChatMemory {
   private final AgentControl control;
   private final ChatMemory delegate;

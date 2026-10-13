@@ -7,9 +7,11 @@ import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.rag.RetrievalAugmentor;
+import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.service.*;
 import dev.langchain4j.service.tool.*;
 import io.agt.core.*;
+import io.agt.core.data.*;
 import java.lang.reflect.*;
 import java.util.*;
 
@@ -69,6 +71,37 @@ public final class LangChain4jGovernance {
     return buffered;
   }
 
+  private void requireData(DataResource resource, DataResource.Kind kind) {
+    control.requirePoints(
+        Set.of(InterventionPoint.PRE_DATA_ACCESS, InterventionPoint.POST_DATA_ACCESS));
+    if (resource.kind() != kind) {
+      throw new GovernanceException("data_resource_kind_mismatch");
+    }
+  }
+
+  public ContentRetriever guardRetriever(DataResource resource, ContentRetriever retriever) {
+    requireData(Objects.requireNonNull(resource), DataResource.Kind.RETRIEVAL);
+    Objects.requireNonNull(retriever);
+    if (retriever instanceof GovernedContentRetriever) {
+      throw new GovernanceException("already_governed");
+    }
+    if (retriever
+        .getClass()
+        .getName()
+        .equals("dev.langchain4j.rag.content.retriever.ListeningContentRetriever")) {
+      throw new GovernanceException("data_listener_unsupported");
+    }
+    return new GovernedContentRetriever(control, resource, retriever);
+  }
+
+  public ChatMemory guardMemory(DataResource resource, ChatMemory memory) {
+    requireData(Objects.requireNonNull(resource), DataResource.Kind.MEMORY);
+    if (memory instanceof GovernedChatMemory) {
+      throw new GovernanceException("already_governed");
+    }
+    return new GovernedChatMemory(control, resource, Objects.requireNonNull(memory));
+  }
+
   public ToolExecutor guardTool(String name, ToolExecutor executor) {
     control.requirePoints(
         Set.of(InterventionPoint.PRE_TOOL_CALL, InterventionPoint.POST_TOOL_CALL));
@@ -94,6 +127,7 @@ public final class LangChain4jGovernance {
     private ToolExecutionErrorHandler errorHandler;
     private String systemMessage;
     private boolean concurrentTools;
+    private boolean governedMemoryProvider;
     private boolean asyncAnnotatedTools;
     private java.util.concurrent.Executor toolExecutor;
 
@@ -122,17 +156,71 @@ public final class LangChain4jGovernance {
       return this;
     }
 
+    public Builder<T> chatMemory(DataResource resource, ChatMemory memory) {
+      if (this.memory != null || memoryProvider != null) {
+        throw new GovernanceException("data_component_conflict");
+      }
+      this.memory = governance.guardMemory(resource, memory);
+      return this;
+    }
+
+    public Builder<T> governedChatMemoryProvider(Map<String, MemoryBinding> bindings) {
+      if (memory != null || memoryProvider != null) {
+        throw new GovernanceException("data_component_conflict");
+      }
+      governedMemoryProvider = true;
+      var registered = Map.copyOf(bindings);
+      var wrapped = new LinkedHashMap<String, ChatMemory>();
+      registered.forEach(
+          (id, binding) -> {
+            if (!id.equals(binding.resource().instanceId())) {
+              throw new GovernanceException("memory_binding_mismatch");
+            }
+            wrapped.put(id, governance.guardMemory(binding.resource(), binding.memory()));
+          });
+      memoryProvider =
+          id -> {
+            if (!(id instanceof String key) || !wrapped.containsKey(key)) {
+              throw governance
+                  .control
+                  .currentSession()
+                  .fail(InterventionPoint.PRE_DATA_ACCESS, "memory_not_registered");
+            }
+            return wrapped.get(key);
+          };
+      return this;
+    }
+
+    public Builder<T> contentRetriever(DataResource resource, ContentRetriever retriever) {
+      if (augmentor != null) {
+        throw new GovernanceException("data_component_conflict");
+      }
+      augmentor =
+          new SingleSourceAugmentor(
+              governance.control, governance.guardRetriever(resource, retriever));
+      return this;
+    }
+
     public Builder<T> chatMemory(ChatMemory memory) {
+      if (governedMemoryProvider || this.memory instanceof GovernedChatMemory) {
+        throw new GovernanceException("data_component_conflict");
+      }
       this.memory = memory;
       return this;
     }
 
     public Builder<T> chatMemoryProvider(dev.langchain4j.memory.chat.ChatMemoryProvider value) {
+      if (governedMemoryProvider || memory instanceof GovernedChatMemory) {
+        throw new GovernanceException("data_component_conflict");
+      }
       memoryProvider = value;
       return this;
     }
 
     public Builder<T> retrievalAugmentor(RetrievalAugmentor augmentor) {
+      if (this.augmentor instanceof SingleSourceAugmentor) {
+        throw new GovernanceException("data_component_conflict");
+      }
       this.augmentor = augmentor;
       return this;
     }
@@ -195,7 +283,7 @@ public final class LangChain4jGovernance {
     }
 
     public T build() {
-      governance.control.requirePoints(EnumSet.allOf(InterventionPoint.class));
+      governance.control.requirePoints(InterventionPoint.lifecyclePoints());
       if (!type.isInterface()) throw new GovernanceException("ai_service_interface_required");
       for (Method method : type.getMethods()) validateMethod(method);
       boolean streaming = Arrays.stream(type.getMethods()).anyMatch(Builder::isStreaming);

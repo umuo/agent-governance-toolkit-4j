@@ -1,6 +1,6 @@
 # 首期需求规格 v0.1
 
-本文件保留 v0.1 首期基线。v0.2 异步与并发扩展见 [异步需求](async-requirements.md)，当前 v0.3 见 [严格缓冲流式需求](streaming-requirements.md)。
+本文件保留 v0.1 首期基线。v0.2 异步与并发扩展见 [异步需求](async-requirements.md)，v0.3 见 [严格缓冲流式需求](streaming-requirements.md)，当前 v0.4 见 [数据访问需求](data-requirements.md)。
 
 状态：2026-10-13 确认的首期范围。功能定义与验收以本文件为准；实际验证记录见 [验收报告](verification.md)。
 

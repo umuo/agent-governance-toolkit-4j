@@ -83,3 +83,7 @@ AuditSink.write 同步确认；异常导致 runtime 级粘滞故障，所有会�
 框架适配器只依赖核心契约，因此后续 Spring AI 或其他框架可增加独立制品。v0.2 已实现异步/并发扩展，见 [异步使用指南](async-guide.md)。v0.3 通过流式 collector 复用同一异步状态机，抑制早期工具事件，完整响应通过检查后才进入顺序工具循环；最终交付 promise 关联会话终止。详见 [严格缓冲流式指南](streaming-guide.md)。Reactive 背压与实时 token 交付不在当前支持矩阵。
 
 [RAG/Memory、供应链与 OWASP 边界](verification.md) 属于后续工作。Rust FFI、OPA、Cedar 若未来接入，需独立规范与真实兼容测试；JCA 支持某算法不能证明协议互通，排序 JSON 键也不能证明与 ACS 哈希一致。
+
+## 数据访问扩展
+
+v0.4 在原有八个点之外增加 pre_data_access/post_data_access。agt-core.data 提供不可变资源描述符、按操作的规则和独立额度；框架装饰器恢复受保护身份与原生消息形状。数据 I/O 复用受控执行状态机，但不计作模型/工具调用。数据审计 schemaVersion 2 增加操作枚举和资源摘要，保持无敏感原文。具体接入见 [数据访问指南](data-guide.md)。

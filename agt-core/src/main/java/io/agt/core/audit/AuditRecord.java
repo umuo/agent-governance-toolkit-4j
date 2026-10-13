@@ -22,4 +22,46 @@ public record AuditRecord(
     String inputIdentity,
     String enforcedIdentity,
     long durationNanos,
-    List<String> warnings) {}
+    List<String> warnings,
+    String dataOperation,
+    String resourceIdentity) {
+  public AuditRecord(
+      int schemaVersion,
+      Instant timestamp,
+      String sessionId,
+      String agentId,
+      String actionId,
+      InterventionPoint point,
+      EnforcementMode mode,
+      String policyVersion,
+      String verdict,
+      String reasonCode,
+      boolean transformApplied,
+      String approvalOutcome,
+      String executionOutcome,
+      String inputIdentity,
+      String enforcedIdentity,
+      long durationNanos,
+      List<String> warnings) {
+    this(
+        schemaVersion,
+        timestamp,
+        sessionId,
+        agentId,
+        actionId,
+        point,
+        mode,
+        policyVersion,
+        verdict,
+        reasonCode,
+        transformApplied,
+        approvalOutcome,
+        executionOutcome,
+        inputIdentity,
+        enforcedIdentity,
+        durationNanos,
+        warnings,
+        null,
+        null);
+  }
+}

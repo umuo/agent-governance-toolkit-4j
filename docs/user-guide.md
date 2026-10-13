@@ -4,8 +4,8 @@
 
 ```bash
 mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 verify
-java -jar examples/target/agt-examples-0.3.0-SNAPSHOT.jar all
-java -jar examples/target/agt-examples-0.3.0-SNAPSHOT.jar allowed examples/policies/default.yaml
+java -jar examples/target/agt-examples-0.4.0-SNAPSHOT.jar all
+java -jar examples/target/agt-examples-0.4.0-SNAPSHOT.jar allowed examples/policies/default.yaml
 ```
 
 可选场景为 `allowed`、`denied`、`transform`、`approval`、`approval-denied`、`budget`。默认策略采用 Java Builder，第二个参数可切换为本地 YAML。`transform` 演示预期结果为 `masked:modified`；使用外部 YAML 时策略以文件为准，该演示仍要求其改写验收条件满足。
@@ -30,7 +30,7 @@ try (var audit = new JsonlAuditSink(Path.of("new-audit.jsonl"));
 }
 ```
 
-这些类型分别位于 `io.agt.core`、`io.agt.core.policy`、`io.agt.core.audit`、`io.agt.langchain4j`。`Assistant` 是业务定义的接口，如 `interface Assistant { String chat(String message); }`。应用依赖 `io.agt:agt-langchain4j:0.3.0-SNAPSHOT`，模型客户端由应用单独引入和配置。制品尚未发布到 Maven Central，需执行 `mvn -B -ntp -s .mvn/settings.xml install` 安装到本机默认 Maven 仓库，或使用自己的制品仓库。验证脚本使用的 `.cache/m2` 是隔离缓存，不会自动成为其他工程的默认仓库。
+这些类型分别位于 `io.agt.core`、`io.agt.core.policy`、`io.agt.core.audit`、`io.agt.langchain4j`。`Assistant` 是业务定义的接口，如 `interface Assistant { String chat(String message); }`。应用依赖 `io.agt:agt-langchain4j:0.4.0-SNAPSHOT`，模型客户端由应用单独引入和配置。制品尚未发布到 Maven Central，需执行 `mvn -B -ntp -s .mvn/settings.xml install` 安装到本机默认 Maven 仓库，或使用自己的制品仓库。验证脚本使用的 `.cache/m2` 是隔离缓存，不会自动成为其他工程的默认仓库。
 
 每个线程创建独立会话。`openSession` 绑定当前线程，`close` 恢复之前的会话并清理线程局部引用；应使用 try-with-resources 按嵌套顺序关闭。会话禁止跨线程关闭。可从其他线程撤销会话，但不会自动传播到任意异步任务。
 
@@ -128,3 +128,7 @@ try (var session = control.openSession(identity)) {
 GovernanceException.code 返回稳定错误代码。会话终止后的调用通常返回 session_failed，首次终止原因可通过 session.failureCode() 和审计记录读取。不要重试相同已终止会话。预算和动作限制依赖宿主正确控制会话生命周期。
 
 未经检查的原始模型 listener 不受装饰器输出检查保护，因此 guardModel 拒绝带 listener 的原始模型。使用 AuditSink 订阅治理元数据。SDK 不阻止宿主继续调用保留的原始引用，模型内部 HTTP 重试不等同于 SDK 可观察的模型调用；需要硬限制网络尝试时，应关闭 provider 内部重试并由受控入口重试。
+
+## 数据访问权限
+
+v0.4 增加显式 DataResource 绑定、guardRetriever/guardMemory、contentRetriever 与受控记忆 provider。原始 augmentor/memory 上下文桥不自动获得 ACL；接入与限制见 [数据权限指南](data-guide.md)。

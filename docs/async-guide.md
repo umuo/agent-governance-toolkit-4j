@@ -6,10 +6,10 @@ v0.2 在原有治理运行时与适配器上增加 CompletableFuture / Completio
 
 ```bash
 bash scripts/verify.sh
-java -jar examples/target/agt-examples-0.3.0-SNAPSHOT.jar async all
+java -jar examples/target/agt-examples-0.4.0-SNAPSHOT.jar async all
 # 单独演示取消和同步并发工具
-java -jar examples/target/agt-examples-0.3.0-SNAPSHOT.jar async cancel
-java -jar examples/target/agt-examples-0.3.0-SNAPSHOT.jar async parallel
+java -jar examples/target/agt-examples-0.4.0-SNAPSHOT.jar async cancel
+java -jar examples/target/agt-examples-0.4.0-SNAPSHOT.jar async parallel
 ```
 
 异步演示包括允许、跨租户拒绝、参数/结果改写、审批、预算耗尽、源 future 取消和同步并发工具七个场景。被拒绝/取消的场景工具副作用必须为零；改写结果为 masked:modified；并发场景两个工具实际重叠执行。
@@ -99,7 +99,7 @@ flowchart TD
 
 Builder 的 ChatMemory、ChatMemoryProvider 和 RetrievalAugmentor 增加上下文/取消桥。支持原生 async 方法；若 Memory/RAG 明确返回 AsyncNotSupportedException，则在 SDK 有界工作池执行对应同步方法，不使用不带上下文的默认线程池。
 
-这是框架 I/O 适配，**没有新增检索前 ACL 或记忆读写授权**。预算只计模型/工具，不把 Memory/RAG 桥接任务记为模型调用。历史和增强内容仍在模型前进入完整消息检查。宿主负责会话数据隔离与真实存储权限。
+这是框架 I/O 适配，**上下文桥本身没有检索前 ACL 或记忆读写授权；v0.4 使用独立的 [显式数据绑定](data-guide.md)**。预算只计模型/工具，不把 Memory/RAG 桥接任务记为模型调用。历史和增强内容仍在模型前进入完整消息检查。宿主负责会话数据隔离与真实存储权限。
 
 ## 容量、取消与审计
 

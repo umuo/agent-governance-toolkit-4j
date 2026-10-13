@@ -2,6 +2,7 @@ package io.agt.core;
 
 import io.agt.core.approval.ApprovalResolver;
 import io.agt.core.audit.*;
+import io.agt.core.data.DataLimits;
 import io.agt.core.policy.StructuredPolicy;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -13,6 +14,7 @@ public final class AgentControl implements AutoCloseable {
   final PolicyEvaluator evaluator;
   final String version;
   final BudgetLimits budget;
+  final DataLimits dataLimits;
   final EnforcementMode mode;
   final ApprovalResolver approvalResolver;
   final long approvalTimeoutMillis;
@@ -30,6 +32,7 @@ public final class AgentControl implements AutoCloseable {
     evaluator = Objects.requireNonNull(b.evaluator);
     version = Identifiers.require(evaluator.version());
     budget = Objects.requireNonNull(b.budget);
+    dataLimits = Objects.requireNonNull(b.dataLimits);
     mode = Objects.requireNonNull(b.mode);
     audit = Objects.requireNonNull(b.audit, "An audit sink is required");
     approvalResolver = b.approvalResolver;
@@ -328,6 +331,7 @@ public final class AgentControl implements AutoCloseable {
   public static final class Builder {
     private final PolicyEvaluator evaluator;
     private BudgetLimits budget;
+    private DataLimits dataLimits;
     private EnforcementMode mode = EnforcementMode.ENFORCE;
     private AuditSink audit;
     private ApprovalResolver approvalResolver;
@@ -337,6 +341,12 @@ public final class AgentControl implements AutoCloseable {
     private Builder(PolicyEvaluator evaluator) {
       this.evaluator = Objects.requireNonNull(evaluator);
       budget = evaluator instanceof StructuredPolicy p ? p.budget() : BudgetLimits.defaults();
+      dataLimits = evaluator instanceof StructuredPolicy p ? p.dataLimits() : DataLimits.defaults();
+    }
+
+    public Builder dataLimits(DataLimits value) {
+      dataLimits = Objects.requireNonNull(value);
+      return this;
     }
 
     public Builder asyncLimits(AsyncLimits value) {

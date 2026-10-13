@@ -8,7 +8,7 @@ import java.util.function.*;
 final class AsyncInvocation<E, T> {
   private final HostSession session;
   private final boolean root, tool;
-  private boolean bridge;
+  private boolean bridge, data;
   private final String name, id = UUID.randomUUID().toString();
   private final Object input, lock = new Object();
   private final Function<Object, E> prepare;
@@ -17,7 +17,7 @@ final class AsyncInvocation<E, T> {
   private final BiFunction<T, Object, T> replace;
   private final long start = System.nanoTime();
   private final Promise result = new Promise();
-  private final InterventionPoint pre, post;
+  private InterventionPoint pre, post;
   private boolean done, reserved, started, ownsRun;
   private volatile FutureTask<Void> startTask;
   private volatile Thread startThread;
@@ -50,6 +50,14 @@ final class AsyncInvocation<E, T> {
         root
             ? InterventionPoint.OUTPUT
             : tool ? InterventionPoint.POST_TOOL_CALL : InterventionPoint.POST_MODEL_CALL;
+  }
+
+  AsyncInvocation<E, T> dataAccess() {
+    data = true;
+    session.registerDataAudit(id, input);
+    pre = InterventionPoint.PRE_DATA_ACCESS;
+    post = InterventionPoint.POST_DATA_ACCESS;
+    return this;
   }
 
   AsyncInvocation<E, T> bridge() {
@@ -87,7 +95,11 @@ final class AsyncInvocation<E, T> {
           session.enterRun(true);
           ownsRun = true;
         } else if (!bridge) {
-          session.reserve(tool);
+          if (data) {
+            session.reserveData();
+          } else {
+            session.reserve(tool);
+          }
           reserved = true;
         }
       }
@@ -97,7 +109,11 @@ final class AsyncInvocation<E, T> {
         if (done) return;
         session.checkActive();
         if (!root && !bridge) {
-          session.commit(tool);
+          if (data) {
+            session.commitData();
+          } else {
+            session.commit(tool);
+          }
         }
         started = true;
       }
@@ -223,7 +239,13 @@ final class AsyncInvocation<E, T> {
       leave = ownsRun;
       ownsRun = false;
     }
-    if (release) session.release(tool);
+    if (release) {
+      if (data) {
+        session.releaseData();
+      } else {
+        session.release(tool);
+      }
+    }
     if (leave) session.leaveRun();
   }
 

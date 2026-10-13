@@ -32,6 +32,10 @@ public final class GovernanceDemo {
   }
 
   public static void main(String[] args) {
+    if (args.length > 0 && args[0].equals("data")) {
+      DataGovernanceDemo.main(Arrays.copyOfRange(args, 1, args.length));
+      return;
+    }
     if (args.length > 0 && args[0].equals("stream")) {
       try {
         StreamingGovernanceDemo.main(Arrays.copyOfRange(args, 1, args.length));

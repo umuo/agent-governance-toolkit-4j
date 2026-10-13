@@ -1,0 +1,66 @@
+{
+  "date": "2026-10-13",
+  "timezone": "Asia/Shanghai",
+  "sdk": "0.4.0-SNAPSHOT",
+  "langchain4j": "1.20.0",
+  "jackson": "2.22.1",
+  "javaRelease": 17,
+  "platform": "macOS arm64",
+  "testMatrix": [
+    {
+      "jdk": "17.0.11",
+      "coreTests": 59,
+      "adapterTests": 92,
+      "httpTests": 2,
+      "sseTests": 1,
+      "total": 154,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "syncDemoScenarios": 6,
+      "asyncDemoScenarios": 7,
+      "streamingDemoScenarios": 6,
+      "dataDemoScenarios": 7,
+      "yamlModelToolDemoPassed": true,
+      "yamlDataDemoPassed": true,
+      "cleanVerifyPassed": true
+    },
+    {
+      "jdk": "21.0.4",
+      "coreTests": 59,
+      "adapterTests": 92,
+      "httpTests": 2,
+      "sseTests": 1,
+      "total": 154,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "syncDemoScenarios": 6,
+      "asyncDemoScenarios": 7,
+      "streamingDemoScenarios": 6,
+      "dataDemoScenarios": 7,
+      "yamlModelToolDemoPassed": true,
+      "yamlDataDemoPassed": true,
+      "cleanVerifyPassed": true
+    }
+  ],
+  "docs": {
+    "strictBuildPassed": true,
+    "dataMermaidBrowserVerified": true,
+    "groupedNavigationBrowserVerified": true
+  },
+  "quality": {
+    "spotlessCheckPassed": true,
+    "sonarRun": false
+  },
+  "limits": {
+    "trustedBackendBindingRequired": true,
+    "automaticOpaqueAugmentorAcl": false,
+    "databaseRowAclProvided": false,
+    "storageTransactionsProvided": false,
+    "dataOperationsAutomaticallyRequireApproval": false
+  },
+  "performance": {
+    "v04Measured": false
+  }
+}

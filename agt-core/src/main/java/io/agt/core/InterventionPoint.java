@@ -12,7 +12,14 @@ public enum InterventionPoint {
   PRE_TOOL_CALL,
   POST_TOOL_CALL,
   OUTPUT,
-  AGENT_SHUTDOWN;
+  AGENT_SHUTDOWN,
+  PRE_DATA_ACCESS,
+  POST_DATA_ACCESS;
+
+  public static java.util.Set<InterventionPoint> lifecyclePoints() {
+    return java.util.Collections.unmodifiableSet(
+        java.util.EnumSet.range(AGENT_STARTUP, AGENT_SHUTDOWN));
+  }
 
   @JsonValue
   public String wireName() {

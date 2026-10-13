@@ -2,6 +2,7 @@ package io.agt.core;
 
 import io.agt.core.approval.*;
 import io.agt.core.audit.AuditRecord;
+import io.agt.core.data.*;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
@@ -21,9 +22,21 @@ public final class HostSession implements AutoCloseable {
   private final Map<String, java.util.function.Consumer<String>> asyncCalls =
       new ConcurrentHashMap<>();
   private ScheduledFuture<?> deadline;
-  private int modelCalls, toolCalls;
-  private int reservedModels, reservedTools;
+  private int modelCalls, toolCalls, dataCalls;
+  private int reservedModels, reservedTools, reservedData;
   private String failureCode;
+
+  private record DataAuditInfo(String operation, String resourceIdentity) {}
+
+  private final Map<String, DataAuditInfo> dataAudit = new ConcurrentHashMap<>();
+
+  void registerDataAudit(String actionId, Object input) {
+    var target = (Map<?, ?>) input;
+    String operation = DataOperation.valueOf((String) target.get("operation")).name();
+    dataAudit.put(
+        actionId, new DataAuditInfo(operation, JsonValues.digest(DataResource.resource(input))));
+  }
+
   private long tokens;
   private boolean tokensKnown = true;
 
@@ -53,7 +66,7 @@ public final class HostSession implements AutoCloseable {
 
   public synchronized BudgetSnapshot budgetSnapshot() {
     return new BudgetSnapshot(
-        modelCalls, toolCalls, tokensKnown ? tokens : null, closed, revoked, failed);
+        modelCalls, toolCalls, tokensKnown ? tokens : null, closed, revoked, failed, dataCalls);
   }
 
   public record BudgetSnapshot(
@@ -62,7 +75,18 @@ public final class HostSession implements AutoCloseable {
       Long tokens,
       boolean closed,
       boolean revoked,
-      boolean failed) {}
+      boolean failed,
+      int dataCalls) {
+    public BudgetSnapshot(
+        int modelCalls,
+        int toolCalls,
+        Long tokens,
+        boolean closed,
+        boolean revoked,
+        boolean failed) {
+      this(modelCalls, toolCalls, tokens, closed, revoked, failed, 0);
+    }
+  }
 
   public synchronized void checkActive() {
     control.checkRuntime();
@@ -310,10 +334,90 @@ public final class HostSession implements AutoCloseable {
 
   private void releaseReservations() {
     // 所有未执行预占先原子释放，再通知任何终止 future，避免观察到陈旧计数。
+    dataCalls -= reservedData;
+    reservedData = 0;
     modelCalls -= reservedModels;
     toolCalls -= reservedTools;
     reservedModels = 0;
     reservedTools = 0;
+  }
+
+  synchronized void reserveData() {
+    checkActive();
+    if (dataCalls >= control.dataLimits.maxCalls()) {
+      throw new GovernanceException("data_budget_exceeded");
+    }
+    dataCalls++;
+    reservedData++;
+  }
+
+  synchronized void commitData() {
+    checkActive();
+    if (reservedData < 1) {
+      throw new GovernanceException("budget_state_invalid");
+    }
+    reservedData--;
+  }
+
+  synchronized void releaseData() {
+    if (reservedData > 0) {
+      reservedData--;
+      dataCalls--;
+    }
+  }
+
+  public DataLimits dataLimits() {
+    return control.dataLimits;
+  }
+
+  public <E, T> T dataOperationPrepared(
+      DataResource resource,
+      DataOperation operation,
+      Object input,
+      Function<Object, E> prepare,
+      Function<E, T> execute,
+      Function<T, Object> project,
+      java.util.function.BiFunction<T, Object, T> replace) {
+    return executePrepared(
+        false,
+        true,
+        null,
+        InterventionPoint.PRE_DATA_ACCESS,
+        InterventionPoint.POST_DATA_ACCESS,
+        resource.target(operation, input),
+        effective -> prepare.apply(resource.value(effective, operation)),
+        execute,
+        result -> resource.target(operation, project.apply(result)),
+        (result, effective) -> replace.apply(result, resource.value(effective, operation)));
+  }
+
+  public <E, T> CompletableFuture<T> dataOperationAsyncPrepared(
+      DataResource resource,
+      DataOperation operation,
+      Object input,
+      Function<Object, E> prepare,
+      Function<E, ? extends CompletionStage<T>> execute,
+      Function<T, Object> project,
+      java.util.function.BiFunction<T, Object, T> replace) {
+    try {
+      return new AsyncInvocation<E, T>(
+              this,
+              false,
+              false,
+              null,
+              resource.target(operation, input),
+              effective -> prepare.apply(resource.value(effective, operation)),
+              execute,
+              result -> resource.target(operation, project.apply(result)),
+              (result, effective) -> replace.apply(result, resource.value(effective, operation)))
+          .dataAccess()
+          .start();
+    } catch (RuntimeException e) {
+      return CompletableFuture.failedFuture(
+          fail(
+              InterventionPoint.PRE_DATA_ACCESS,
+              e instanceof GovernanceException g ? g.code() : "data_access_failed"));
+    }
   }
 
   public Object evaluate(InterventionPoint point, String actionId, String toolName, Object target) {
@@ -533,19 +637,62 @@ public final class HostSession implements AutoCloseable {
       Function<E, T> execute,
       Function<T, Object> project,
       java.util.function.BiFunction<T, Object, T> replace) {
+    return executePrepared(tool, false, name, input, prepare, execute, project, replace);
+  }
+
+  private <E, T> T executePrepared(
+      boolean tool,
+      boolean data,
+      String name,
+      Object input,
+      Function<Object, E> prepare,
+      Function<E, T> execute,
+      Function<T, Object> project,
+      java.util.function.BiFunction<T, Object, T> replace) {
+    return executePrepared(
+        tool,
+        data,
+        name,
+        tool ? InterventionPoint.PRE_TOOL_CALL : InterventionPoint.PRE_MODEL_CALL,
+        tool ? InterventionPoint.POST_TOOL_CALL : InterventionPoint.POST_MODEL_CALL,
+        input,
+        prepare,
+        execute,
+        project,
+        replace);
+  }
+
+  private <E, T> T executePrepared(
+      boolean tool,
+      boolean data,
+      String name,
+      InterventionPoint pre,
+      InterventionPoint post,
+      Object input,
+      Function<Object, E> prepare,
+      Function<E, T> execute,
+      Function<T, Object> project,
+      java.util.function.BiFunction<T, Object, T> replace) {
     String actionId = UUID.randomUUID().toString();
-    InterventionPoint pre =
-        tool ? InterventionPoint.PRE_TOOL_CALL : InterventionPoint.PRE_MODEL_CALL;
-    InterventionPoint post =
-        tool ? InterventionPoint.POST_TOOL_CALL : InterventionPoint.POST_MODEL_CALL;
+    if (data) {
+      registerDataAudit(actionId, input);
+    }
     long operationStart = System.nanoTime();
     boolean reserved = false, startedExecution = false;
     try {
-      reserve(tool);
+      if (data) {
+        reserveData();
+      } else {
+        reserve(tool);
+      }
       reserved = true;
       Object effective = evaluate(pre, actionId, name, input);
       E prepared = prepare.apply(effective);
-      commit(tool);
+      if (data) {
+        commitData();
+      } else {
+        commit(tool);
+      }
       startedExecution = true;
       T result = execute.apply(prepared);
       checkActive();
@@ -564,7 +711,13 @@ public final class HostSession implements AutoCloseable {
           System.nanoTime() - operationStart);
       throw e;
     } finally {
-      if (reserved && !startedExecution) release(tool);
+      if (reserved && !startedExecution) {
+        if (data) {
+          releaseData();
+        } else {
+          release(tool);
+        }
+      }
     }
   }
 
@@ -600,10 +753,13 @@ public final class HostSession implements AutoCloseable {
       String effective,
       long nanos,
       List<String> warnings) {
+    var info = dataAudit.get(actionId);
+    boolean dataPoint =
+        point == InterventionPoint.PRE_DATA_ACCESS || point == InterventionPoint.POST_DATA_ACCESS;
     try {
       control.emit(
           new AuditRecord(
-              1,
+              dataPoint ? 2 : 1,
               Instant.now(),
               id,
               context.agentId(),
@@ -619,9 +775,15 @@ public final class HostSession implements AutoCloseable {
               input,
               effective,
               nanos,
-              warnings));
+              warnings,
+              info == null ? null : info.operation(),
+              info == null ? null : info.resourceIdentity()));
     } catch (GovernanceException e) {
       throw refuse(e.code());
+    } finally {
+      if ("EXECUTION".equals(verdict)) {
+        dataAudit.remove(actionId);
+      }
     }
   }
 
@@ -647,6 +809,8 @@ public final class HostSession implements AutoCloseable {
               modelCalls,
               "toolCalls",
               toolCalls,
+              "dataCalls",
+              dataCalls,
               "failed",
               failed,
               "revoked",

@@ -1,0 +1,46 @@
+apiVersion: agt.java/v1
+version: data-example-v4
+interventionPoints:
+  - agent_startup
+  - input
+  - pre_model_call
+  - post_model_call
+  - pre_tool_call
+  - post_tool_call
+  - output
+  - agent_shutdown
+  - pre_data_access
+  - post_data_access
+budget:
+  maxModelCalls: 20
+  maxToolCalls: 50
+  maxDurationMillis: 300000
+dataLimits:
+  maxCalls: 1000
+  maxItems: 1000
+tools: {}
+resources:
+  knowledge:
+    kind: RETRIEVAL
+    scope: TENANT
+    permissions:
+      RETRIEVE: [data:read]
+  conversation:
+    kind: MEMORY
+    scope: PRINCIPAL
+    permissions:
+      MEMORY_READ: [memory:read]
+      MEMORY_ADD: [memory:write]
+      MEMORY_SET: [memory:replace]
+      MEMORY_CLEAR: [memory:delete]
+contentRules:
+  - id: data-query-redact
+    points: [pre_data_access]
+    denyContains: []
+    replacements:
+      secret: masked
+  - id: data-result-redact
+    points: [post_data_access]
+    denyContains: []
+    replacements:
+      secret: masked

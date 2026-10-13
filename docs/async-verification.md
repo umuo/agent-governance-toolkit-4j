@@ -1,6 +1,6 @@
 # v0.2 异步与并发验收
 
-本文件保留历史验收；当前版本见 [v0.3 流式验收](streaming-verification.md)。
+本文件保留历史验收；当前版本见 [v0.4 数据验收](data-verification.md)。
 
 本阶段依据 [异步需求](async-requirements.md)，保留同步行为并补齐原生 future、并发工具、上下文、取消、期限和会话生命周期。使用方式见 [异步指南](async-guide.md)。OWASP 的具体缓解措施与缺口继续使用 [首期映射](verification.md)，不增加“完整覆盖”声明。
 

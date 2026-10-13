@@ -1,5 +1,7 @@
 # v0.3 流式验收与边界
 
+本页保留 v0.3 历史结果；当前版本见 [v0.4 数据验收](data-verification.md)。
+
 本阶段依据 [流式需求](streaming-requirements.md)，补齐严格缓冲 handler/TokenStream，保留同步与异步行为。接入方式见 [流式指南](streaming-guide.md)。完整 OWASP 需求映射继续沿用首期的“具体缓解措施 + 已验证边界”，不增加完整覆盖标签。
 
 ## 测试映射

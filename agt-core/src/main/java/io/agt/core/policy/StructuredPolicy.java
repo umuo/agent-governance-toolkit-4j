@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.agt.core.*;
+import io.agt.core.data.*;
 import java.nio.file.*;
 import java.util.*;
 
@@ -18,7 +19,19 @@ public final class StructuredPolicy implements PolicyEvaluator {
       Set<InterventionPoint> interventionPoints,
       BudgetLimits budget,
       Map<String, ToolRule> tools,
-      List<ContentRule> contentRules) {}
+      List<ContentRule> contentRules,
+      Map<String, DataRule> resources,
+      DataLimits dataLimits) {
+    public Document(
+        String apiVersion,
+        String version,
+        Set<InterventionPoint> points,
+        BudgetLimits budget,
+        Map<String, ToolRule> tools,
+        List<ContentRule> rules) {
+      this(apiVersion, version, points, budget, tools, rules, Map.of(), DataLimits.defaults());
+    }
+  }
 
   private final Document doc;
 
@@ -29,6 +42,13 @@ public final class StructuredPolicy implements PolicyEvaluator {
     var points = Set.copyOf(Objects.requireNonNull(document.interventionPoints()));
     var tools = Map.copyOf(document.tools() == null ? Map.of() : document.tools());
     tools.keySet().forEach(Identifiers::require);
+    var resources = Map.copyOf(document.resources() == null ? Map.of() : document.resources());
+    resources.keySet().forEach(Identifiers::require);
+    if (!resources.isEmpty()
+        && !points.containsAll(
+            Set.of(InterventionPoint.PRE_DATA_ACCESS, InterventionPoint.POST_DATA_ACCESS))) {
+      throw new IllegalArgumentException("Missing data intervention points");
+    }
     var rules = List.copyOf(document.contentRules() == null ? List.of() : document.contentRules());
     Set<String> ids = new HashSet<>();
     for (ContentRule rule : rules) {
@@ -42,7 +62,9 @@ public final class StructuredPolicy implements PolicyEvaluator {
             points,
             Objects.requireNonNull(document.budget()),
             tools,
-            rules);
+            rules,
+            resources,
+            document.dataLimits() == null ? DataLimits.defaults() : document.dataLimits());
   }
 
   public static StructuredPolicy fromPath(Path path) {
@@ -98,6 +120,10 @@ public final class StructuredPolicy implements PolicyEvaluator {
     return doc.budget();
   }
 
+  public DataLimits dataLimits() {
+    return doc.dataLimits();
+  }
+
   @Override
   public PolicyDecision evaluate(PolicyRequest r) {
     try {
@@ -131,6 +157,15 @@ public final class StructuredPolicy implements PolicyEvaluator {
         throw new GovernanceException("permission_denied");
       rule.parameters().validate(r.target(), r.context());
     }
+    if (r.point() == InterventionPoint.PRE_DATA_ACCESS
+        || r.point() == InterventionPoint.POST_DATA_ACCESS) {
+      var resource = DataResource.resource(r.target());
+      var rule = doc.resources().get(resource.get("name"));
+      if (rule == null) {
+        throw new GovernanceException("data_resource_denied");
+      }
+      rule.validate(r);
+    }
     for (var rule : doc.contentRules())
       if (rule.points().contains(r.point()) && rule.denies(r.target()))
         throw new GovernanceException(rule.id());
@@ -145,8 +180,10 @@ public final class StructuredPolicy implements PolicyEvaluator {
 
   public static final class Builder {
     private final String version;
-    private Set<InterventionPoint> points = EnumSet.allOf(InterventionPoint.class);
+    private Set<InterventionPoint> points = InterventionPoint.lifecyclePoints();
     private BudgetLimits budget = BudgetLimits.defaults();
+    private DataLimits dataLimits = DataLimits.defaults();
+    private final Map<String, DataRule> resources = new LinkedHashMap<>();
     private final Map<String, ToolRule> tools = new LinkedHashMap<>();
     private final List<ContentRule> rules = new ArrayList<>();
 
@@ -170,6 +207,22 @@ public final class StructuredPolicy implements PolicyEvaluator {
       return this;
     }
 
+    public Builder resource(String name, DataRule rule) {
+      if (resources.putIfAbsent(name, Objects.requireNonNull(rule)) != null) {
+        throw new IllegalArgumentException("Duplicate resource");
+      }
+      var expanded = EnumSet.copyOf(points);
+      expanded.add(InterventionPoint.PRE_DATA_ACCESS);
+      expanded.add(InterventionPoint.POST_DATA_ACCESS);
+      points = expanded;
+      return this;
+    }
+
+    public Builder dataLimits(DataLimits value) {
+      dataLimits = Objects.requireNonNull(value);
+      return this;
+    }
+
     public Builder content(ContentRule rule) {
       rules.add(rule);
       return this;
@@ -177,7 +230,8 @@ public final class StructuredPolicy implements PolicyEvaluator {
 
     public StructuredPolicy build() {
       return new StructuredPolicy(
-          new Document("agt.java/v1", version, points, budget, tools, rules));
+          new Document(
+              "agt.java/v1", version, points, budget, tools, rules, resources, dataLimits));
     }
   }
 }

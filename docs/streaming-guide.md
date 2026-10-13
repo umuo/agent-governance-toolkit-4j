@@ -5,7 +5,7 @@ v0.3 支持 LangChain4j 1.20.0 的 handler 模型与 TokenStream 服务入口。
 ## 接入与演示
 
 ~~~bash
-java -jar examples/target/agt-examples-0.3.0-SNAPSHOT.jar stream all
+java -jar examples/target/agt-examples-0.4.0-SNAPSHOT.jar stream all
 ~~~
 
 演示包含允许、改写、跨租户拒绝、最终输出拒绝、容量超限、取消六个场景。应用只在最终检查通过后收到一个文本块；拒绝场景 textBlocks 为 0。最终输出拒绝发生在工具执行之后，所以演示中 toolEffects 为 1，这个副作用不能撤销。
@@ -96,7 +96,7 @@ onPartialResponse 与 onPartialResponseWithContext 二选一，最多配置一�
 
 明确拒绝 onPartialThinking、onPartialToolCall、onRetrieved、onIntermediateResponse、beforeToolExecution、onToolExecuted、onUnmappedRawEvent 及对应 context 回调；这些通道没有自动原文放行。ignoreErrors 拒绝，安全拒绝不能变成继续执行。
 
-Builder 拒绝流式与普通方法混用、同时配置普通 ChatModel、并发工具和异步 @Tool。Reactive Publisher、多模态和复杂输出仍不支持。流式不会提供实时逐 token 体验；这是以延迟换取执行前/交付前治理的产品选择。原始模型、原始工具引用和任意宿主 I/O 仍不受治理，RAG/Memory 访问 ACL 留待后续。
+Builder 拒绝流式与普通方法混用、同时配置普通 ChatModel、并发工具和异步 @Tool。Reactive Publisher、多模态和复杂输出仍不支持。流式不会提供实时逐 token 体验；这是以延迟换取执行前/交付前治理的产品选择。原始模型、原始工具引用和任意宿主 I/O 仍不受治理，RAG/Memory 访问 ACL 需使用 v0.4 的 [显式数据绑定](data-guide.md)。
 
 会话的 watchTermination(promise) 可供适配器把交付 future 关联到期限/撤销/关闭；它不治理 promise 内任意代码，也不计为模型或工具执行。
 

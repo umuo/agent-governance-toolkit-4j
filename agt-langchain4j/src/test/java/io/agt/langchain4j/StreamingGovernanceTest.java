@@ -236,7 +236,7 @@ class StreamingGovernanceTest {
       assertEquals(1, session.budgetSnapshot().toolCalls());
     }
     assertEquals(
-        EnumSet.allOf(InterventionPoint.class),
+        InterventionPoint.lifecyclePoints(),
         EnumSet.copyOf(audit.stream().map(AuditRecord::point).toList()));
   }
 

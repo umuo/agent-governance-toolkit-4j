@@ -1,5 +1,14 @@
 # 更新记录
 
+## 0.4.0-SNAPSHOT — 2026-10-13
+
+- 增加可信 DataResource、按数据操作授权的 DataRule、独立 DataLimits 与两个数据访问干预点。
+- 新增 guardRetriever/guardMemory、单源 contentRetriever 与显式绑定的记忆 provider，MemoryId 不建立所有权。
+- 查询、查询上下文、检索结果与记忆消息检查/改写落实到实际 delegate 和持久化值；受保护身份与来源字段不能变更。
+- 原生异步与同步 fallback 沿用会话/取消/审计语义，数据操作不计为模型或工具。
+- 数据审计 schemaVersion 2 增加操作类型和资源摘要；继续默认无敏感原文。
+- 新增七个数据演示、文件策略和实际框架的数据访问验收；原始 opaque augmentor/memory 路径不宣称自动 ACL。
+
 ## 0.3.0-SNAPSHOT — 2026-10-13
 
 - 增加 guardStreamingModel、StreamingLimits 与原生 TokenStream 的受控 Builder。
