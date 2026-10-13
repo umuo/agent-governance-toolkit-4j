@@ -1,0 +1,20 @@
+site_name: Agent Governance Toolkit for Java
+site_description: 纯 Java Agent 运行时治理 SDK
+nav:
+  - 首页: index.md
+  - 需求规格: requirements.md
+  - 使用与配置: user-guide.md
+  - 架构与扩展: architecture.md
+  - 异步需求: async-requirements.md
+  - 异步与并发: async-guide.md
+  - 流式需求: streaming-requirements.md
+  - 严格缓冲流式: streaming-guide.md
+  - 当前验收: streaming-verification.md
+  - 异步历史验收: async-verification.md
+  - 首期历史验收: verification.md
+plugins:
+  - search
+  - mermaid2
+markdown_extensions:
+  - tables
+  - fenced_code

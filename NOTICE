@@ -1,0 +1,12 @@
+Agent Governance Toolkit for Java is an independent implementation.
+
+Design references:
+- Microsoft Agent Governance Toolkit (MIT), Copyright (c) Microsoft Corporation.
+  https://github.com/microsoft/agent-governance-toolkit
+  Local reference revision: 309e04367acc3091a41954e18ecfb2c7ea45b255 (v5.0.0)
+- LangChain4j Runtime Security (MIT), Copyright (c) 2026 Agent Security contributors.
+  https://github.com/umuo/langchain4j-runtime-security
+  Local reference revision: 7d461b9de778ff9ad0cf6aa0c28539511e0026fa
+
+No Microsoft source files or original security guarantees are incorporated by attribution alone.
+LangChain4j and Jackson are distributed as dependencies under their respective licenses.

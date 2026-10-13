@@ -1,0 +1,61 @@
+{
+  "date": "2026-10-13",
+  "timezone": "Asia/Shanghai",
+  "sdk": "0.3.0-SNAPSHOT",
+  "langchain4j": "1.20.0",
+  "jackson": "2.22.1",
+  "javaRelease": 17,
+  "platform": "macOS arm64",
+  "testMatrix": [
+    {
+      "jdk": "17.0.11",
+      "coreTests": 54,
+      "adapterTests": 60,
+      "httpTests": 2,
+      "sseTests": 1,
+      "total": 117,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "syncDemoScenarios": 6,
+      "asyncDemoScenarios": 7,
+      "streamingDemoScenarios": 6,
+      "yamlDemoPassed": true,
+      "cleanVerifyPassed": true
+    },
+    {
+      "jdk": "21.0.4",
+      "coreTests": 54,
+      "adapterTests": 60,
+      "httpTests": 2,
+      "sseTests": 1,
+      "total": 117,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "syncDemoScenarios": 6,
+      "asyncDemoScenarios": 7,
+      "streamingDemoScenarios": 6,
+      "yamlDemoPassed": true,
+      "cleanVerifyPassed": true
+    }
+  ],
+  "quality": {
+    "spotlessCheckPassed": true,
+    "sonarRun": false
+  },
+  "docs": {
+    "strictBuildPassed": true,
+    "streamingMermaidBrowserVerified": true
+  },
+  "performance": {
+    "v03Measured": false
+  },
+  "limits": {
+    "streamingDelivery": "one authorized final text block",
+    "streamingTools": "sequential synchronous",
+    "reactiveSupported": false,
+    "providerHandleCancellationGuaranteed": false,
+    "ragMemoryAclImplemented": false
+  }
+}

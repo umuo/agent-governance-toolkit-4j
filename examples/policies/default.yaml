@@ -1,0 +1,35 @@
+apiVersion: agt.java/v1
+version: demo-v1
+interventionPoints:
+  - agent_startup
+  - input
+  - pre_model_call
+  - post_model_call
+  - pre_tool_call
+  - post_tool_call
+  - output
+  - agent_shutdown
+budget:
+  maxModelCalls: 20
+  maxToolCalls: 50
+  maxDurationMillis: 300000
+# 未在 tools 中登记的工具默认拒绝；所有 OBJECT 拒绝未知参数。
+tools:
+  lookup:
+    permissions: [read]
+    approvalRequired: false
+    parameters:
+      type: OBJECT
+      properties:
+        tenant: {type: STRING, equalsContext: tenantId}
+        query: {type: STRING, minLength: 1, maxLength: 200}
+      required: [tenant, query]
+contentRules:
+  - id: block-marker
+    points: [input, pre_model_call, post_model_call, pre_tool_call, post_tool_call, output]
+    denyContains: [FORBIDDEN]
+    replacements: {}
+  - id: redact-result
+    points: [post_tool_call]
+    denyContains: []
+    replacements: {secret: masked}

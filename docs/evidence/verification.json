@@ -1,0 +1,66 @@
+{
+  "date": "2026-10-13",
+  "timezone": "Asia/Shanghai",
+  "langchain4j": "1.20.0",
+  "jackson": "2.22.1",
+  "javaRelease": 17,
+  "platform": "macOS arm64",
+  "testMatrix": [
+    {
+      "jdk": "17.0.11",
+      "coreTests": 40,
+      "adapterTests": 22,
+      "httpTests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "demoScenarios": 6,
+      "yamlDemoPassed": true
+    },
+    {
+      "jdk": "21.0.4",
+      "coreTests": 40,
+      "adapterTests": 22,
+      "httpTests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "demoScenarios": 6,
+      "yamlDemoPassed": true
+    }
+  ],
+  "documentation": {
+    "mkdocsStrictBuild": true,
+    "browserMermaidDiagramsVerified": 3
+  },
+  "benchmark": [
+    {
+      "arch": "aarch64",
+      "audit": "in-memory callback",
+      "baselineMedianNanos": 1125,
+      "governedMedianNanos": 50791,
+      "governedP95Nanos": 67250,
+      "java": "17.0.11",
+      "os": "Mac OS X",
+      "samples": 5000,
+      "warmup": 1000
+    },
+    {
+      "arch": "aarch64",
+      "audit": "in-memory callback",
+      "baselineMedianNanos": 1500,
+      "governedMedianNanos": 49125,
+      "governedP95Nanos": 77416,
+      "java": "21.0.4",
+      "os": "Mac OS X",
+      "samples": 5000,
+      "warmup": 1000
+    }
+  ],
+  "benchmarkLimitations": [
+    "Single JVM smoke measurement; not JMH",
+    "No model network or persistent audit cost",
+    "1000 warmup, 5000 samples, volatile result consumption",
+    "No production latency/throughput promise"
+  ]
+}

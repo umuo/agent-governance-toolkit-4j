@@ -1,0 +1,44 @@
+{
+  "date": "2026-10-13",
+  "timezone": "Asia/Shanghai",
+  "sdk": "0.2.0-SNAPSHOT",
+  "langchain4j": "1.20.0",
+  "jackson": "2.22.1",
+  "javaRelease": 17,
+  "platform": "macOS arm64",
+  "testMatrix": [
+    {
+      "jdk": "17.0.11",
+      "coreTests": 53,
+      "adapterTests": 34,
+      "httpTests": 2,
+      "total": 89,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "syncDemoScenarios": 6,
+      "asyncDemoScenarios": 7,
+      "yamlDemoPassed": true
+    },
+    {
+      "jdk": "21.0.4",
+      "coreTests": 53,
+      "adapterTests": 34,
+      "httpTests": 2,
+      "total": 89,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "syncDemoScenarios": 6,
+      "asyncDemoScenarios": 7,
+      "yamlDemoPassed": true
+    }
+  ],
+  "docs": {
+    "strictBuildPassed": true,
+    "asyncMermaidBrowserVerified": true
+  },
+  "performance": {
+    "v02Measured": false
+  }
+}
