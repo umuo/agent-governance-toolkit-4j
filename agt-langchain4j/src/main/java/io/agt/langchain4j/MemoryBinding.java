@@ -10,8 +10,8 @@ import java.util.Objects;
  * <p>注册键、resource.instanceId 和原生 memory.id 必须一致。
  */
 public record MemoryBinding(DataResource resource, ChatMemory memory) {
-  public MemoryBinding {
-    Objects.requireNonNull(resource);
-    Objects.requireNonNull(memory);
-  }
+    public MemoryBinding {
+        Objects.requireNonNull(resource);
+        Objects.requireNonNull(memory);
+    }
 }
