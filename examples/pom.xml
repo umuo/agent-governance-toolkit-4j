@@ -4,13 +4,25 @@
   <parent>
     <groupId>io.agt</groupId>
     <artifactId>agt-parent</artifactId>
-    <version>0.5.0-SNAPSHOT</version>
+    <version>0.6.0-SNAPSHOT</version>
   </parent>
   <artifactId>agt-examples</artifactId>
   <dependencies>
+    <!-- 只用于 ASI02 的内存 SQL 教学示例，不进入治理核心或适配器依赖。 -->
+    <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <version>2.3.232</version>
+      <scope>runtime</scope>
+    </dependency>
     <dependency>
       <groupId>io.agt</groupId>
       <artifactId>agt-langchain4j</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.agt</groupId>
+      <artifactId>agt-sandbox</artifactId>
       <version>${project.version}</version>
     </dependency>
   </dependencies>

@@ -35,6 +35,7 @@ public final class FixedCommand {
     private final Map<String, List<String>> choices;
     private final CommandLimits limits;
     private final Semaphore capacity;
+    private final CommandBackend backend;
 
     public FixedCommand(
             String name,
@@ -43,6 +44,33 @@ public final class FixedCommand {
             Path directory,
             List<CommandArgument> arguments,
             CommandLimits limits) {
+        this(name, executable, sha256, directory, arguments, limits, null, true);
+    }
+
+    /** 可选受隔离后端；未指定时保留原有受信任本机进程执行语义。 */
+    public FixedCommand(
+            String name,
+            Path executable,
+            String sha256,
+            Path directory,
+            List<CommandArgument> arguments,
+            CommandLimits limits,
+            CommandBackend backend) {
+        this(name, executable, sha256, directory, arguments, limits, backend, false);
+    }
+
+    private FixedCommand(
+            String name,
+            Path executable,
+            String sha256,
+            Path directory,
+            List<CommandArgument> arguments,
+            CommandLimits limits,
+            CommandBackend backend,
+            boolean localExecution) {
+        if (!localExecution && backend == null) {
+            throw new GovernanceException("command_backend_required");
+        }
         this.name = Identifiers.require(name);
         this.executable = canonical(executable, false);
         this.directory = canonical(directory, true);
@@ -64,7 +92,19 @@ public final class FixedCommand {
         choices = Map.copyOf(values);
         this.limits = Objects.requireNonNull(limits);
         capacity = new Semaphore(limits.maxConcurrent());
+        this.backend = backend;
         verify();
+    }
+
+    private CommandExecution plan(Map<String, Object> values) {
+        var argv = new ArrayList<String>();
+        for (var argument : arguments) {
+            argv.add(
+                    argument.literal() != null
+                            ? argument.literal()
+                            : (String) values.get(argument.parameter()));
+        }
+        return new CommandExecution(executable, directory, argv, limits);
     }
 
     public String name() {
@@ -108,12 +148,15 @@ public final class FixedCommand {
                     }
                 });
         verify();
+        if (backend != null) {
+            backend.prepare(plan(values));
+        }
     }
 
     /**
      * 执行已通过策略与模板校验的参数。
      *
-     * <p>无 shell、无 stdin、无继承环境；关闭/撤销/期限与线程中断触发尽力清理。
+     * <p>不隐式插入 shell 或提供 stdin；可选后端的环境与清理保证由该后端声明。
      */
     public String execute(Map<String, Object> values, HostSession session) {
         prepare(values);
@@ -125,6 +168,9 @@ public final class FixedCommand {
         Thread reader = null;
         long start = System.nanoTime();
         try {
+            if (backend != null) {
+                return backend.execute(plan(values), session);
+            }
             var argv = new ArrayList<String>();
             argv.add(executable.toString());
             for (var argument : arguments) {

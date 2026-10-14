@@ -1,0 +1,7 @@
+H2 Database Engine 2.3.232
+Copyright (c) H2 Group.
+This unmodified binary dependency is distributed under the MPL 2.0 option.
+License: https://www.mozilla.org/en-US/MPL/2.0/
+Corresponding source: https://repo.maven.apache.org/maven2/com/h2database/h2/2.3.232/h2-2.3.232-sources.jar
+Project: https://h2database.com
+The project also offers EPL 1.0 as an alternative license.

@@ -10,3 +10,19 @@ Design references:
 
 No Microsoft source files or original security guarantees are incorporated by attribution alone.
 LangChain4j and Jackson are distributed as dependencies under their respective licenses.
+
+Optional sandbox integration:
+- Agent Sandbox SDK 0.1.0-alpha.1 (MIT).
+  Copyright (c) 2026 umuo and Agent Sandbox SDK contributors.
+  https://github.com/umuo/sandbox-demo
+  SDK code is consumed as a Maven Central dependency, not copied into agt-core.
+- Java Native Access (JNA) is consumed under its Apache License 2.0 option.
+  https://github.com/java-native-access/jna
+
+Teaching examples only:
+- H2 Database Engine 2.3.232, Copyright (c) H2 Group.
+  Consumed as a runtime binary dependency under its MPL 2.0 option (also available under EPL 1.0).
+  https://h2database.com
+  License: https://www.mozilla.org/en-US/MPL/2.0/
+  Corresponding unmodified source: https://repo.maven.apache.org/maven2/com/h2database/h2/2.3.232/h2-2.3.232-sources.jar
+  H2 is not a runtime dependency of the governance core or framework/sandbox adapters.

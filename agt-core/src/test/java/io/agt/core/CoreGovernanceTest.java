@@ -256,6 +256,46 @@ class CoreGovernanceTest {
         }
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void approvalWorkerTimeoutIsDistinctFromHostStageFailure(boolean workerTimeout) {
+        var effects = new AtomicInteger();
+        try (var control =
+                        AgentControl.builder(policy(true))
+                                .audit(r -> {})
+                                .approvalTimeout(Duration.ofSeconds(2))
+                                .approvalResolver(
+                                        request ->
+                                                workerTimeout
+                                                        ? new CompletableFuture<
+                                                                ApprovalResponse>() {
+                                                            @Override
+                                                            public ApprovalResponse get(
+                                                                    long timeout, TimeUnit unit)
+                                                                    throws
+                                                                            java.util.concurrent
+                                                                                    .TimeoutException {
+                                                                // 确定性模拟工作线程的限时等待先结束，无需依赖调度竞争。
+                                                                throw new java.util.concurrent
+                                                                        .TimeoutException();
+                                                            }
+                                                        }
+                                                        : CompletableFuture.failedFuture(
+                                                                new java.util.concurrent
+                                                                        .TimeoutException()))
+                                .build();
+                var session = control.openSession(CONTEXT)) {
+            assertEquals(
+                    workerTimeout ? "approval_timeout" : "approval_failed",
+                    assertThrows(
+                                    GovernanceException.class,
+                                    () -> tool(session, Map.of("tenant", "tenant-a"), effects))
+                            .code());
+            assertEquals(0, effects.get());
+            assertEquals(0, session.budgetSnapshot().toolCalls());
+        }
+    }
+
     @Test
     void approvalTimeoutIncludesBlockingResolver() {
         try (var c =

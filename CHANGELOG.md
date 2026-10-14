@@ -1,5 +1,14 @@
 # 更新记录
 
+## 0.6.0-SNAPSHOT — 2026-10-14
+
+- 新增可选 agt-sandbox，引用 Central 的 agent-sandbox-sdk 0.1.0-alpha.1；core 不引入 JNA。
+- FixedCommand 增加后端 SPI，复用原有 LangChain4j commandTool/guardCommand 路径，传入空后端明确拒绝。
+- strict 与显式 allowHostReads 注册不可变宿主策略，不做普通进程或权限模式回退。
+- 关闭 SDK 原文回调，严格检查两条输出的截断、聚合大小、退出、超时与 UTF-8。
+- 有限守护工作池、零队列、有界调用方等待；取消/超时或未知执行异常后拒绝复用后端，不宣称 OS 回收已确认。
+- 新增 Central SDK 接入契约、本机 macOS 原生测试和七个离线沙箱演示；现有 SDK 限制继续明确披露。
+
 ## 0.5.0-SNAPSHOT — 2026-10-14
 
 - 增加 FixedCommand、CommandArgument、CommandLimits，以及 guardCommand / Builder.commandTool。
@@ -40,3 +49,8 @@
 
 - 首期同步治理核心、LangChain4j 适配器、结构化策略、改写、审批、预算与 JSONL 审计。
 - 六个离线场景与首期 Java 17/21 验收。首期历史证据见 docs/verification.md。
+
+### v0.6 安全场景教学补充
+
+- 新增 ASI02 / ASI05 分包的 25 个独立中文场景类，包含完整 AI Services 循环、真实回环 HTTP、H2 内存 SQL 与原生隔离边界。
+- 审批工作线程超时与调用方超时统一返回 approval_timeout；宿主 stage 异常保持 approval_failed，增加确定性回归。

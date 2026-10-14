@@ -5,8 +5,8 @@ v0.4 把授权落实到实际 ContentRetriever 和 ChatMemory。模型前的内�
 ## 运行示例与策略
 
 ~~~bash
-java -jar examples/target/agt-examples-0.5.0-SNAPSHOT.jar data all
-java -jar examples/target/agt-examples-0.5.0-SNAPSHOT.jar data rag-transform examples/policies/data-access.yaml
+java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar data all
+java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar data rag-transform examples/policies/data-access.yaml
 ~~~
 
 七个场景覆盖 RAG 允许、跨租户拒绝、查询/结果改写、记忆写入改写、跨所有者拒绝、只读身份写入拒绝和数据额度耗尽。禁止访问时 sourceCalls/memoryReads/memoryWrites 为零。数据预算示例已经完成一次授权访问，第二次拒绝，因此 dataCalls/sourceCalls 为 1。

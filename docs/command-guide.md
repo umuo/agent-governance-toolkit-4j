@@ -63,7 +63,7 @@ stdout/stderr 合并后按字节限制，既有 JSON 投影与整体载荷限制
 
 ```bash
 mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 verify
-java -jar examples/target/agt-examples-0.5.0-SNAPSHOT.jar command all
+java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar command all
 ```
 
 七个场景：允许、权限拒绝、参数注入拒绝、审批允许、审批拒绝、输出脱敏、超时。程序打印 result、实际启动标记和工具计数；拒绝场景的 started 为 false。演示使用本机 JDK 和固定示例类，临时工作目录及启动标记在结束后删除。即时审批与自动计算本机摘要只用于演示。

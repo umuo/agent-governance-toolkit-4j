@@ -1,0 +1,98 @@
+{
+  "date": "2026-10-14",
+  "timezone": "Asia/Shanghai",
+  "sdk": "0.6.0-SNAPSHOT",
+  "langchain4j": "1.20.0",
+  "jackson": "2.22.1",
+  "javaRelease": 17,
+  "platform": "macOS 15.5 arm64",
+  "testMatrix": [
+    {
+      "jdk": "17.0.11",
+      "coreTests": 74,
+      "adapterTests": 111,
+      "httpTests": 2,
+      "sseTests": 1,
+      "total": 216,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "syncDemoScenarios": 6,
+      "asyncDemoScenarios": 7,
+      "streamingDemoScenarios": 6,
+      "dataDemoScenarios": 7,
+      "yamlModelToolDemoPassed": true,
+      "yamlDataDemoPassed": true,
+      "cleanVerifyPassed": true,
+      "commandDemoScenarios": 7,
+      "sandboxContractTests": 23,
+      "sandboxNativeTests": 5,
+      "sandboxDemoScenarios": 7,
+      "totalDemoScenarios": 40,
+      "asi02TeachingClasses": 16,
+      "asi05TeachingClasses": 9
+    },
+    {
+      "jdk": "21.0.4",
+      "coreTests": 74,
+      "adapterTests": 111,
+      "httpTests": 2,
+      "sseTests": 1,
+      "total": 216,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "syncDemoScenarios": 6,
+      "asyncDemoScenarios": 7,
+      "streamingDemoScenarios": 6,
+      "dataDemoScenarios": 7,
+      "yamlModelToolDemoPassed": true,
+      "yamlDataDemoPassed": true,
+      "cleanVerifyPassed": true,
+      "commandDemoScenarios": 7,
+      "sandboxContractTests": 23,
+      "sandboxNativeTests": 5,
+      "sandboxDemoScenarios": 7,
+      "totalDemoScenarios": 40,
+      "asi02TeachingClasses": 16,
+      "asi05TeachingClasses": 9
+    }
+  ],
+  "docs": {
+    "strictBuildPassed": true,
+    "representativeMermaidBrowserVerified": true,
+    "sandboxNavigationBrowserVerified": true,
+    "securityTeachingNavigationBrowserVerified": true
+  },
+  "quality": {
+    "spotlessCheckPassed": true,
+    "sonarRun": false
+  },
+  "limits": {
+    "trustedBackendBindingRequired": true,
+    "automaticOpaqueAugmentorAcl": false,
+    "databaseRowAclProvided": false,
+    "storageTransactionsProvided": false,
+    "dataOperationsAutomaticallyRequireApproval": false,
+    "operatingSystemSandboxProvided": true,
+    "arbitraryGeneratedCodeSupported": false,
+    "executableHashCoversLoadedDependencies": false,
+    "descendantCleanupGuaranteed": false,
+    "strictReadProfileAvailableOnTestMachine": false,
+    "hostReadRequiresExplicitOptIn": true,
+    "sdkCleanupAcknowledgementProvided": false,
+    "uncertainCleanupPermanentlyQuarantinesBackend": true,
+    "windowsLinuxNativeVerified": false
+  },
+  "performance": {
+    "v06Measured": false
+  },
+  "commandTests": {
+    "core": 13,
+    "adapter": 19,
+    "realSubprocess": true,
+    "syntheticParentEnvironmentMarkerNotInherited": true
+  },
+  "sandboxSdk": "io.github.umuo:agent-sandbox-sdk:0.1.0-alpha.1",
+  "jna": "5.19.1"
+}

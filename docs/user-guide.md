@@ -4,8 +4,8 @@
 
 ```bash
 mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 verify
-java -jar examples/target/agt-examples-0.5.0-SNAPSHOT.jar all
-java -jar examples/target/agt-examples-0.5.0-SNAPSHOT.jar allowed examples/policies/default.yaml
+java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar all
+java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar allowed examples/policies/default.yaml
 ```
 
 可选场景为 `allowed`、`denied`、`transform`、`approval`、`approval-denied`、`budget`。默认策略采用 Java Builder，第二个参数可切换为本地 YAML。`transform` 演示预期结果为 `masked:modified`；使用外部 YAML 时策略以文件为准，该演示仍要求其改写验收条件满足。
@@ -30,7 +30,7 @@ try (var audit = new JsonlAuditSink(Path.of("new-audit.jsonl"));
 }
 ```
 
-这些类型分别位于 `io.agt.core`、`io.agt.core.policy`、`io.agt.core.audit`、`io.agt.langchain4j`。`Assistant` 是业务定义的接口，如 `interface Assistant { String chat(String message); }`。应用依赖 `io.agt:agt-langchain4j:0.5.0-SNAPSHOT`，模型客户端由应用单独引入和配置。制品尚未发布到 Maven Central，需执行 `mvn -B -ntp -s .mvn/settings.xml install` 安装到本机默认 Maven 仓库，或使用自己的制品仓库。验证脚本使用的 `.cache/m2` 是隔离缓存，不会自动成为其他工程的默认仓库。
+这些类型分别位于 `io.agt.core`、`io.agt.core.policy`、`io.agt.core.audit`、`io.agt.langchain4j`。`Assistant` 是业务定义的接口，如 `interface Assistant { String chat(String message); }`。应用依赖 `io.agt:agt-langchain4j:0.6.0-SNAPSHOT`，模型客户端由应用单独引入和配置。制品尚未发布到 Maven Central，需执行 `mvn -B -ntp -s .mvn/settings.xml install` 安装到本机默认 Maven 仓库，或使用自己的制品仓库。验证脚本使用的 `.cache/m2` 是隔离缓存，不会自动成为其他工程的默认仓库。
 
 每个线程创建独立会话。`openSession` 绑定当前线程，`close` 恢复之前的会话并清理线程局部引用；应使用 try-with-resources 按嵌套顺序关闭。会话禁止跨线程关闭。可从其他线程撤销会话，但不会自动传播到任意异步任务。
 

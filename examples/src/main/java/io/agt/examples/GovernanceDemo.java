@@ -51,6 +51,18 @@ public final class GovernanceDemo {
     }
 
     public static void main(String[] args) {
+        if (args.length > 0 && args[0].equals("security")) {
+            try {
+                SecurityDemos.main(Arrays.copyOfRange(args, 1, args.length));
+                return;
+            } catch (Exception error) {
+                throw new IllegalStateException("安全学习演示验收失败", error);
+            }
+        }
+        if (args.length > 0 && args[0].equals("sandbox")) {
+            SandboxGovernanceDemo.main(Arrays.copyOfRange(args, 1, args.length));
+            return;
+        }
         if (args.length > 0 && args[0].equals("command")) {
             CommandGovernanceDemo.main(Arrays.copyOfRange(args, 1, args.length));
             return;

@@ -204,6 +204,20 @@ class FixedCommandTest {
     @Test
     void invalidProfilesAndWrongDigestFailAtRegistration() throws Exception {
         Path java = Path.of(System.getProperty("java.home"), "bin", "java").toRealPath();
+        assertEquals(
+                "command_backend_required",
+                assertThrows(
+                                GovernanceException.class,
+                                () ->
+                                        new FixedCommand(
+                                                "fixed",
+                                                java,
+                                                digest(java),
+                                                directory,
+                                                List.of(),
+                                                CommandLimits.DEFAULT,
+                                                null))
+                        .code());
         assertThrows(
                 GovernanceException.class,
                 () ->

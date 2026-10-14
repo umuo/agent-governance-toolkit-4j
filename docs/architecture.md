@@ -91,3 +91,7 @@ v0.4 在原有八个点之外增加 pre_data_access/post_data_access。agt-core.
 ## 固定命令执行
 
 v0.5 的 agt-core.execution 提供不可变 argv 模板、枚举参数、程序摘要与有界 ProcessBuilder 执行。LangChain4j CommandToolExecutor 作为受控工具 delegate，准备阶段在政策改写/审批后、计数提交前检查模板与摘要；同步重载/异步复用同一工具路径。Builder.commandTool 生成 schema，guardCommand 提供独立入口。结果仍由 POST_TOOL_CALL 和 OUTPUT 治理；不增加生命周期干预点或审计原文。此路径针对受信任程序，不是操作系统沙箱，见 [固定命令指南](command-guide.md)。
+
+## 可选 OS 沙箱后端
+
+v0.6 增加 agt-sandbox，固定依赖 Central SDK 0.1.0-alpha.1。core.execution 的 CommandBackend/CommandExecution 承接准备和执行，FixedCommand 的原有本机入口保持兼容；七参数入口显式绑定非空后端。LangChain4j 无需增加第二条工具治理路径，仍经 commandTool/guardCommand 授权、改写、审批和计数。SDK 阻塞调用使用独立有限工作池、零队列、最终输出严格检查；取消/超时的后端永久隔离，不声称获得 SDK 尚未提供的回收确认。详见 [沙箱接入指南](sandbox-guide.md)。

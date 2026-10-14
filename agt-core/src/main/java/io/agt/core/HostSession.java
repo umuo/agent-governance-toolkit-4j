@@ -687,6 +687,11 @@ public final class HostSession implements AutoCloseable {
         } catch (CancellationException e) {
             throw new GovernanceException("approval_cancelled");
         } catch (ExecutionException e) {
+            // 审批工作线程先达到等待期限时，Future 会包装其 TimeoutException。
+            // 与调用线程先超时保持同一语义；宿主 stage 的异常仍是 approval_failed。
+            if (e.getCause() instanceof TimeoutException) {
+                throw new GovernanceException("approval_timeout");
+            }
             throw new GovernanceException("approval_failed");
         } finally {
             pending.remove(task);
