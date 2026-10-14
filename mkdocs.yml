@@ -11,13 +11,14 @@ nav:
       - 当前沙箱 SDK: sandbox-guide.md
       - ASI02 与 ASI05 场景教学: security-demos.md
   - 需求与架构:
+      - 架构与扩展: architecture.md
+      - 关键类与调用机制: key-classes.md
       - 首期需求: requirements.md
       - 异步需求: async-requirements.md
       - 流式需求: streaming-requirements.md
       - 数据权限需求: data-requirements.md
       - 固定命令需求: command-requirements.md
       - 沙箱接入需求: sandbox-requirements.md
-      - 架构与扩展: architecture.md
   - 验收:
       - 当前 v0.6: sandbox-verification.md
       - v0.5 固定命令: command-verification.md

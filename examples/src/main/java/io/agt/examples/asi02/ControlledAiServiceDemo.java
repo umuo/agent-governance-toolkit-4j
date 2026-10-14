@@ -4,6 +4,7 @@ import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
+import dev.langchain4j.internal.Json;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -19,7 +20,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 推荐接入入口：受控 AI Services 完成模型、工具、模型的完整循环。
+ * 推荐接入入口：受控 AI Services 完成模型、工具、模型的完整循环。 当前 DEMO 主要测试调用工具前修改参数，调用工具结果后修改执行结果；
  *
  * <p>本机确定性模型只生成固定合成调用；真实 LangChain4j 负责工具调度，无需 API Key。
  */
@@ -50,9 +51,11 @@ public final class ControlledAiServiceDemo {
                 new ChatModel() {
                     @Override
                     public ChatResponse doChat(ChatRequest request) {
+                        System.out.println(Json.toJson(request));
                         calls.incrementAndGet();
                         var last = request.messages().get(request.messages().size() - 1);
                         if (last instanceof ToolExecutionResultMessage result) {
+                            // 获取最后一条工具执行结果的消息，如果和指定字符串不匹配则抛出异常，否则返回AiMessage Response
                             // 第二次模型调用必须收到脱敏后的工具文本。
                             if (!"masked:modified".equals(result.text())) {
                                 throw new IllegalStateException("原始结果进入模型");
@@ -61,6 +64,8 @@ public final class ControlledAiServiceDemo {
                                     .aiMessage(AiMessage.from(result.text()))
                                     .build();
                         }
+
+                        // 这里是返回一个带有工具调用 request AiMessage Response
                         return ChatResponse.builder()
                                 .aiMessage(
                                         AiMessage.from(
@@ -73,6 +78,7 @@ public final class ControlledAiServiceDemo {
                     }
                 };
         var points = EnumSet.noneOf(InterventionPoint.class);
+        // 工具的策略 StructuredPolicy
         var policy =
                 ToolScenario.allowed(false)
                         .content(
@@ -88,6 +94,18 @@ public final class ControlledAiServiceDemo {
                                         List.of(),
                                         Map.of("secret", "masked")))
                         .build();
+        /*
+         * 使用建造者模式初始化治理运行时配置，
+         * policy：传入定义好的策略评估器实例
+         * 将策略规则绑定为该运行时的全局判定引擎，后续所有会话的鉴权、限额、工具拦截、改写都基于该 policy 进行。
+         * .audit(r -> points.add(r.point()))
+         * 强制审计约束（No Audit, No Run）： 框架在设计上有严格的安全保障——AgentControl 强制要求必须提供一个 AuditSink
+         * （若为 null 会直接抛出 NullPointerException("An audit sink is required")），杜绝没有任何审计留痕的裸奔运行。
+         *
+         * 入参 r 是框架生成的结构化审计日志对象 AuditRecord。
+         * r.point() 获取本次治理动作触发的生命周期拦截点，保存到points
+         * */
+        // 创建 AgentControl；points.add
         try (var control = AgentControl.builder(policy).audit(r -> points.add(r.point())).build()) {
             try (var session = control.openSession(ToolScenario.identity(Set.of("read")))) {
                 // SDK 组装受控模型和工具；只包装已构建的 Assistant 无法覆盖内部动作。
@@ -98,6 +116,15 @@ public final class ControlledAiServiceDemo {
                                 .tools(business)
                                 .build();
                 String answer = assistant.chat("查询当前租户资料");
+                /*
+                 * 这里返回的结果：masked:modified
+                 * ToolRequest mock 的 {"query": "original", "tenant": "tenant-a"}
+                 * tool call before -> 调用工具前会把 original 替换为 modified
+                 * 调用工具后返回：secret:modified
+                 * tool call after -> 会把 secret 替换为 masked
+                 * 最终就会返回：masked:modified
+                 * */
+                // 这里开始执行 Agent，在上面代码中mock，保证返回的一定是工具的执行结果
                 if (!"masked:modified".equals(answer)
                         || calls.get() != 2
                         || business.effects.get() != 1) {
