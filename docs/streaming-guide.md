@@ -5,7 +5,7 @@ v0.3 支持 LangChain4j 1.20.0 的 handler 模型与 TokenStream 服务入口。
 ## 接入与演示
 
 ~~~bash
-java -jar examples/target/agt-examples-0.4.0-SNAPSHOT.jar stream all
+java -jar examples/target/agt-examples-0.5.0-SNAPSHOT.jar stream all
 ~~~
 
 演示包含允许、改写、跨租户拒绝、最终输出拒绝、容量超限、取消六个场景。应用只在最终检查通过后收到一个文本块；拒绝场景 textBlocks 为 0。最终输出拒绝发生在工具执行之后，所以演示中 toolEffects 为 1，这个副作用不能撤销。

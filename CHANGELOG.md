@@ -1,5 +1,13 @@
 # 更新记录
 
+## 0.5.0-SNAPSHOT — 2026-10-14
+
+- 增加 FixedCommand、CommandArgument、CommandLimits，以及 guardCommand / Builder.commandTool。
+- 宿主固定程序、可信摘要、工作目录和 argv；模型只能选择有限枚举参数。准备阶段校验在改写/审批后、执行计数前完成。
+- 清空继承环境、关闭 stdin、有界合并输出、严格 UTF-8、有限执行时间与容量；会话终止与中断尽力清理主进程和可观察后代。
+- 同步重载与异步工具继续使用现有策略、预算、审批和审计；新增真实子进程/AI Services 测试及七个离线演示。
+- 固定受信任程序入口不是操作系统沙箱，不提供任意模型生成代码的安全运行保证。
+
 ## 0.4.0-SNAPSHOT — 2026-10-13
 
 - 增加可信 DataResource、按数据操作授权的 DataRule、独立 DataLimits 与两个数据访问干预点。

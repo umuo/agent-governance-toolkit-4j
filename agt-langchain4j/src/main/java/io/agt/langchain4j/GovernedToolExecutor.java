@@ -63,11 +63,14 @@ final class GovernedToolExecutor implements ToolExecutor {
                     toolName,
                     args,
                     effective ->
-                            ToolExecutionRequest.builder()
-                                    .id(request.id())
-                                    .name(toolName)
-                                    .arguments(JsonValues.write(TextProjection.object(effective)))
-                                    .build(),
+                            prepare(
+                                    ToolExecutionRequest.builder()
+                                            .id(request.id())
+                                            .name(toolName)
+                                            .arguments(
+                                                    JsonValues.write(
+                                                            TextProjection.object(effective)))
+                                            .build()),
                     execute,
                     GovernedToolExecutor::project,
                     GovernedToolExecutor::replace);
@@ -77,6 +80,10 @@ final class GovernedToolExecutor implements ToolExecutor {
                     ? session.refuse(code)
                     : session.fail(InterventionPoint.PRE_TOOL_CALL, code);
         }
+    }
+
+    private ToolExecutionRequest prepare(ToolExecutionRequest request) {
+        return delegate instanceof CommandToolExecutor command ? command.prepare(request) : request;
     }
 
     private static Map<String, Object> project(ToolExecutionResult result) {
@@ -121,11 +128,14 @@ final class GovernedToolExecutor implements ToolExecutor {
                     toolName,
                     JsonValues.parseObject(request.arguments()),
                     effective ->
-                            ToolExecutionRequest.builder()
-                                    .id(request.id())
-                                    .name(toolName)
-                                    .arguments(JsonValues.write(TextProjection.object(effective)))
-                                    .build(),
+                            prepare(
+                                    ToolExecutionRequest.builder()
+                                            .id(request.id())
+                                            .name(toolName)
+                                            .arguments(
+                                                    JsonValues.write(
+                                                            TextProjection.object(effective)))
+                                            .build()),
                     effective ->
                             AsyncSources.normalize(
                                     delegate.executeAsync(effective, context), "tool"),

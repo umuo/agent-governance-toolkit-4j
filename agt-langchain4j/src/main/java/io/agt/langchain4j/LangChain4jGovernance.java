@@ -9,6 +9,7 @@ import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.memory.chat.ChatMemoryProvider;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
+import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.rag.RetrievalAugmentor;
 import dev.langchain4j.rag.content.retriever.ContentRetriever;
@@ -26,6 +27,7 @@ import io.agt.core.GovernanceException;
 import io.agt.core.HostSession;
 import io.agt.core.InterventionPoint;
 import io.agt.core.data.DataResource;
+import io.agt.core.execution.FixedCommand;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
@@ -153,6 +155,12 @@ public final class LangChain4jGovernance {
             throw new GovernanceException("already_governed");
         }
         return new GovernedToolExecutor(control, name, Objects.requireNonNull(executor));
+    }
+
+    /** 返回受模型/工具策略治理的固定命令；不能提供任意脚本执行能力。 */
+    public ToolExecutor guardCommand(FixedCommand command) {
+        Objects.requireNonNull(command);
+        return guardTool(command.name(), new CommandToolExecutor(control, command));
     }
 
     public <T> Builder<T> aiServices(Class<T> type) {
@@ -288,6 +296,23 @@ public final class LangChain4jGovernance {
                                             .toolExecutor(executor)
                                             .build()));
             return this;
+        }
+
+        /** 从固定模板生成工具 schema，仍必须在策略中显式许可该名称及权限。 */
+        public Builder<T> commandTool(FixedCommand command) {
+            Objects.requireNonNull(command);
+            var schema = JsonObjectSchema.builder();
+            command.choices().forEach(schema::addEnumProperty);
+            schema.required(new ArrayList<>(command.choices().keySet()));
+            schema.additionalProperties(false);
+            return tools(
+                    Map.of(
+                            ToolSpecification.builder()
+                                    .name(command.name())
+                                    .description("执行宿主注册的固定命令，参数只允许预定义选项")
+                                    .parameters(schema.build())
+                                    .build(),
+                            new CommandToolExecutor(governance.control, command)));
         }
 
         public Builder<T> tools(List<AiServiceTool> values) {

@@ -87,3 +87,7 @@ AuditSink.write 同步确认；异常导致 runtime 级粘滞故障，所有会�
 ## 数据访问扩展
 
 v0.4 在原有八个点之外增加 pre_data_access/post_data_access。agt-core.data 提供不可变资源描述符、按操作的规则和独立额度；框架装饰器恢复受保护身份与原生消息形状。数据 I/O 复用受控执行状态机，但不计作模型/工具调用。数据审计 schemaVersion 2 增加操作枚举和资源摘要，保持无敏感原文。具体接入见 [数据访问指南](data-guide.md)。
+
+## 固定命令执行
+
+v0.5 的 agt-core.execution 提供不可变 argv 模板、枚举参数、程序摘要与有界 ProcessBuilder 执行。LangChain4j CommandToolExecutor 作为受控工具 delegate，准备阶段在政策改写/审批后、计数提交前检查模板与摘要；同步重载/异步复用同一工具路径。Builder.commandTool 生成 schema，guardCommand 提供独立入口。结果仍由 POST_TOOL_CALL 和 OUTPUT 治理；不增加生命周期干预点或审计原文。此路径针对受信任程序，不是操作系统沙箱，见 [固定命令指南](command-guide.md)。

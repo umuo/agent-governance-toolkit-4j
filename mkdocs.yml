@@ -7,14 +7,17 @@ nav:
       - 异步与并发: async-guide.md
       - 严格缓冲流式: streaming-guide.md
       - RAG 与记忆权限: data-guide.md
+      - 固定命令与 ASI05: command-guide.md
   - 需求与架构:
       - 首期需求: requirements.md
       - 异步需求: async-requirements.md
       - 流式需求: streaming-requirements.md
       - 数据权限需求: data-requirements.md
+      - 固定命令需求: command-requirements.md
       - 架构与扩展: architecture.md
   - 验收:
-      - 当前 v0.4: data-verification.md
+      - 当前 v0.5: command-verification.md
+      - v0.4 数据权限: data-verification.md
       - v0.3 历史: streaming-verification.md
       - v0.2 历史: async-verification.md
       - v0.1 历史: verification.md

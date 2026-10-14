@@ -6,10 +6,10 @@ v0.2 在原有治理运行时与适配器上增加 CompletableFuture / Completio
 
 ```bash
 bash scripts/verify.sh
-java -jar examples/target/agt-examples-0.4.0-SNAPSHOT.jar async all
+java -jar examples/target/agt-examples-0.5.0-SNAPSHOT.jar async all
 # 单独演示取消和同步并发工具
-java -jar examples/target/agt-examples-0.4.0-SNAPSHOT.jar async cancel
-java -jar examples/target/agt-examples-0.4.0-SNAPSHOT.jar async parallel
+java -jar examples/target/agt-examples-0.5.0-SNAPSHOT.jar async cancel
+java -jar examples/target/agt-examples-0.5.0-SNAPSHOT.jar async parallel
 ```
 
 异步演示包括允许、跨租户拒绝、参数/结果改写、审批、预算耗尽、源 future 取消和同步并发工具七个场景。被拒绝/取消的场景工具副作用必须为零；改写结果为 masked:modified；并发场景两个工具实际重叠执行。

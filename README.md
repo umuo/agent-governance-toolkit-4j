@@ -2,7 +2,7 @@
 
 纯 Java 的 Agent 运行时治理 SDK，首个适配器支持 **LangChain4j 1.20.0**。使用方式参考微软 AGT：加载策略、创建可信会话、通过 `guardModel` / `guardTool` 或受控 AI Services Builder 接入治理。
 
-当前 v0.4 支持同步/异步文本调用、严格缓冲流式、非流式的可选并发工具、RAG/记忆访问授权和八类生命周期干预点（另有两个数据访问点）、工具授权与参数校验、内容检查和改写、动作绑定审批、会话预算、撤销及结构化审计。功能以治理运行时为中心，不受 LangChain4j Guardrails 的能力边界限制。
+当前 v0.5 支持同步/异步文本调用、严格缓冲流式、非流式的可选并发工具、RAG/记忆访问授权和八类生命周期干预点（另有两个数据访问点）、工具授权与参数校验、内容检查和改写、动作绑定审批、会话预算、撤销及结构化审计。新增固定命令工具：程序摘要、宿主 argv 模板、枚举参数、环境清理与有界进程执行。功能以治理运行时为中心，不受 LangChain4j Guardrails 的能力边界限制。
 
 ## 构建与演示
 
@@ -10,12 +10,12 @@
 
 ```bash
 mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 verify
-java -jar examples/target/agt-examples-0.4.0-SNAPSHOT.jar all
-java -jar examples/target/agt-examples-0.4.0-SNAPSHOT.jar async all
-java -jar examples/target/agt-examples-0.4.0-SNAPSHOT.jar stream all
-java -jar examples/target/agt-examples-0.4.0-SNAPSHOT.jar data all
+java -jar examples/target/agt-examples-0.5.0-SNAPSHOT.jar all
+java -jar examples/target/agt-examples-0.5.0-SNAPSHOT.jar async all
+java -jar examples/target/agt-examples-0.5.0-SNAPSHOT.jar stream all
+java -jar examples/target/agt-examples-0.5.0-SNAPSHOT.jar data all
 # 实际加载 YAML 策略
-java -jar examples/target/agt-examples-0.4.0-SNAPSHOT.jar allowed examples/policies/default.yaml
+java -jar examples/target/agt-examples-0.5.0-SNAPSHOT.jar allowed examples/policies/default.yaml
 ```
 
 `all` 包含允许、跨租户拒绝、参数和结果改写、审批允许、审批拒绝、预算耗尽六个场景。被拒绝场景必须输出 `toolEffects: 0`；改写场景输出 `masked:modified`。
@@ -34,7 +34,7 @@ mvn -B -ntp -s .mvn/settings.xml install
 <dependency>
   <groupId>io.agt</groupId>
   <artifactId>agt-langchain4j</artifactId>
-  <version>0.4.0-SNAPSHOT</version>
+  <version>0.5.0-SNAPSHOT</version>
 </dependency>
 ```
 
@@ -86,7 +86,8 @@ SDK 在 future 完成后关闭该会话；具体取消、并发与执行器约�
 - [异步与并发工具指南](docs/async-guide.md)
 - [流式使用指南](docs/streaming-guide.md)
 - [RAG 与记忆访问权限](docs/data-guide.md)
-- [当前验收与边界](docs/data-verification.md)
+- [当前验收与边界](docs/command-verification.md)
+- [本地沙箱 SDK 接入调研与维护需求](docs/sandbox-integration-review.md)
 - [首期历史验收与 OWASP 映射](docs/verification.md)
 
 ```bash
@@ -95,6 +96,9 @@ python3 -m venv .cache/docs-venv
 .cache/docs-venv/bin/mkdocs serve
 .cache/docs-venv/bin/mkdocs build --strict
 ```
+
+- [固定命令工具与 ASI05 边界](docs/command-guide.md)
+- [固定命令需求与选型](docs/command-requirements.md)
 
 ## 支持边界
 
