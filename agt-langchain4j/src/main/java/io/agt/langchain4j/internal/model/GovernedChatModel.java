@@ -1,4 +1,4 @@
-package io.agt.langchain4j;
+package io.agt.langchain4j.internal.model;
 
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
@@ -13,6 +13,8 @@ import io.agt.core.AgentControl;
 import io.agt.core.GovernanceException;
 import io.agt.core.HostSession;
 import io.agt.core.InterventionPoint;
+import io.agt.langchain4j.internal.concurrent.AsyncSources;
+import io.agt.langchain4j.internal.message.TextProjection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;

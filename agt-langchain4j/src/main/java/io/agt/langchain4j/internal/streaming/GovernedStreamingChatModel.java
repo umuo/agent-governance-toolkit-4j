@@ -1,4 +1,4 @@
-package io.agt.langchain4j;
+package io.agt.langchain4j.internal.streaming;
 
 import dev.langchain4j.model.ModelProvider;
 import dev.langchain4j.model.chat.Capability;
@@ -16,6 +16,8 @@ import dev.langchain4j.model.chat.response.StreamingHandle;
 import io.agt.core.AgentControl;
 import io.agt.core.GovernanceException;
 import io.agt.core.HostSession;
+import io.agt.langchain4j.StreamingLimits;
+import io.agt.langchain4j.internal.model.ModelAdapters;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -50,7 +52,7 @@ final class GovernedStreamingChatModel implements StreamingChatModel {
                         return delegate.defaultRequestParameters();
                     }
                 };
-        governed = new GovernedChatModel(control, collected);
+        governed = ModelAdapters.guard(control, collected);
     }
 
     @Override

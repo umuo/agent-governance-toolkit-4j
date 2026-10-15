@@ -1,4 +1,4 @@
-package io.agt.langchain4j;
+package io.agt.langchain4j.internal.memory;
 
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.memory.ChatMemory;
@@ -7,6 +7,9 @@ import io.agt.core.GovernanceException;
 import io.agt.core.HostSession;
 import io.agt.core.data.DataOperation;
 import io.agt.core.data.DataResource;
+import io.agt.langchain4j.internal.concurrent.AsyncSources;
+import io.agt.langchain4j.internal.data.DataAccessSupport;
+import io.agt.langchain4j.internal.message.TextProjection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -42,7 +45,7 @@ final class GovernedChatMemory implements ChatMemory {
     private List<ChatMessage> prepareMessages(
             List<ChatMessage> original, Object effective, HostSession session) {
         checkBinding();
-        return DataProjection.replaceMessages(original, effective, session);
+        return TextProjection.replaceMessages(original, effective, session);
     }
 
     @Override
@@ -54,7 +57,7 @@ final class GovernedChatMemory implements ChatMemory {
         var result = new ArrayList<ChatMessage>();
         for (var message : messages) {
             result.add(Objects.requireNonNull(message));
-            DataProjection.limit(result.size(), control.currentSession());
+            DataAccessSupport.limit(result.size(), control.currentSession());
         }
         return List.copyOf(result);
     }
@@ -84,7 +87,7 @@ final class GovernedChatMemory implements ChatMemory {
             session.dataOperationPrepared(
                     resource,
                     operation,
-                    DataProjection.messages(originals, session),
+                    TextProjection.messages(originals, session),
                     v -> prepareMessages(originals, v, session),
                     prepared -> {
                         execute.accept(prepared);
@@ -98,7 +101,7 @@ final class GovernedChatMemory implements ChatMemory {
                         return null;
                     });
         } catch (RuntimeException error) {
-            throw DataProjection.failure(session, error);
+            throw DataAccessSupport.failure(session, error);
         }
     }
 
@@ -118,10 +121,10 @@ final class GovernedChatMemory implements ChatMemory {
                         return null;
                     },
                     v -> delegate.messages(),
-                    result -> DataProjection.messages(result, session),
-                    (result, v) -> DataProjection.replaceMessages(result, v, session));
+                    result -> TextProjection.messages(result, session),
+                    (result, v) -> TextProjection.replaceMessages(result, v, session));
         } catch (RuntimeException error) {
-            throw DataProjection.failure(session, error);
+            throw DataAccessSupport.failure(session, error);
         }
     }
 
@@ -152,7 +155,7 @@ final class GovernedChatMemory implements ChatMemory {
                         return null;
                     });
         } catch (RuntimeException error) {
-            throw DataProjection.failure(session, error);
+            throw DataAccessSupport.failure(session, error);
         }
     }
 
@@ -179,7 +182,7 @@ final class GovernedChatMemory implements ChatMemory {
             return session.dataOperationAsyncPrepared(
                     resource,
                     operation,
-                    DataProjection.messages(originals, session),
+                    TextProjection.messages(originals, session),
                     v -> prepareMessages(originals, v, captured),
                     prepared ->
                             AsyncSources.fallback(
@@ -198,7 +201,7 @@ final class GovernedChatMemory implements ChatMemory {
                     });
         } catch (RuntimeException error) {
             return CompletableFuture.failedFuture(
-                    session == null ? error : DataProjection.failure(session, error));
+                    session == null ? error : DataAccessSupport.failure(session, error));
         }
     }
 
@@ -222,11 +225,11 @@ final class GovernedChatMemory implements ChatMemory {
                     v ->
                             AsyncSources.fallback(
                                     captured, delegate.messagesAsync(), delegate::messages),
-                    result -> DataProjection.messages(result, captured),
-                    (result, v) -> DataProjection.replaceMessages(result, v, captured));
+                    result -> TextProjection.messages(result, captured),
+                    (result, v) -> TextProjection.replaceMessages(result, v, captured));
         } catch (RuntimeException error) {
             return CompletableFuture.failedFuture(
-                    session == null ? error : DataProjection.failure(session, error));
+                    session == null ? error : DataAccessSupport.failure(session, error));
         }
     }
 }

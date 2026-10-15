@@ -1,4 +1,4 @@
-package io.agt.langchain4j;
+package io.agt.langchain4j.internal.concurrent;
 
 import dev.langchain4j.exception.AsyncNotSupportedException;
 import io.agt.core.GovernanceException;
@@ -14,10 +14,10 @@ import java.util.function.Supplier;
  *
  * <p>异步组合显式传播取消，避免 thenApply/thenCompose 的衍生 future 丢失源取消。
  */
-final class AsyncSources {
+public final class AsyncSources {
     private AsyncSources() {}
 
-    static Throwable unwrap(Throwable error) {
+    public static Throwable unwrap(Throwable error) {
         while ((error instanceof CompletionException || error instanceof ExecutionException)
                 && error.getCause() != null) {
             error = error.getCause();
@@ -25,7 +25,7 @@ final class AsyncSources {
         return error;
     }
 
-    static <T> CompletableFuture<T> normalize(CompletableFuture<T> source, String code) {
+    public static <T> CompletableFuture<T> normalize(CompletableFuture<T> source, String code) {
         var result =
                 new CompletableFuture<T>() {
                     @Override
@@ -55,7 +55,7 @@ final class AsyncSources {
         return result;
     }
 
-    static <T> CompletableFuture<T> fallback(
+    public static <T> CompletableFuture<T> fallback(
             HostSession session, CompletableFuture<T> source, Supplier<T> blocking) {
         var fallback = new AtomicReference<CompletableFuture<T>>();
         var result =

@@ -1,4 +1,4 @@
-package io.agt.langchain4j;
+package io.agt.langchain4j.internal.streaming;
 
 import dev.langchain4j.model.chat.ChatRequestOptions;
 import dev.langchain4j.model.chat.StreamingChatModel;
@@ -16,6 +16,8 @@ import dev.langchain4j.model.chat.response.StreamingHandle;
 import io.agt.core.GovernanceException;
 import io.agt.core.HostSession;
 import io.agt.core.JsonValues;
+import io.agt.langchain4j.StreamingLimits;
+import io.agt.langchain4j.internal.message.TextProjection;
 import java.util.concurrent.CompletableFuture;
 
 /**

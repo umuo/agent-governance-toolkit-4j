@@ -1,9 +1,10 @@
-package io.agt.langchain4j;
+package io.agt.langchain4j.internal.memory;
 
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.memory.ChatMemory;
 import io.agt.core.AgentControl;
 import io.agt.core.HostSession;
+import io.agt.langchain4j.internal.concurrent.AsyncSources;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 

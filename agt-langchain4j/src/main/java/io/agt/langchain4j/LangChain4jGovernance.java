@@ -28,6 +28,12 @@ import io.agt.core.HostSession;
 import io.agt.core.InterventionPoint;
 import io.agt.core.data.DataResource;
 import io.agt.core.execution.FixedCommand;
+import io.agt.langchain4j.internal.memory.MemoryAdapters;
+import io.agt.langchain4j.internal.message.TextProjection;
+import io.agt.langchain4j.internal.model.ModelAdapters;
+import io.agt.langchain4j.internal.rag.RetrievalAdapters;
+import io.agt.langchain4j.internal.streaming.StreamingAdapters;
+import io.agt.langchain4j.internal.tool.ToolAdapters;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
@@ -52,7 +58,7 @@ import java.util.function.Function;
 /**
  * LangChain4j 治理门面与构建器。
  *
- * <p>提供受治理的模型、流式模型、记忆、检索器及工具适配，保证对 LangChain4j 组件的全面治理管控。
+ * <p>提供受治理的模型、流式模型、记忆、检索器及工具适配，治理范围由实际组装的受控组件及配置决定。
  */
 public final class LangChain4jGovernance {
     private final AgentControl control;
@@ -81,15 +87,7 @@ public final class LangChain4jGovernance {
     }
 
     public ChatModel guardModel(ChatModel model) {
-        control.requirePoints(
-                Set.of(InterventionPoint.PRE_MODEL_CALL, InterventionPoint.POST_MODEL_CALL));
-        if (!model.listeners().isEmpty()) {
-            throw new GovernanceException("raw_model_listeners_unsupported");
-        }
-        if (model instanceof GovernedChatModel) {
-            throw new GovernanceException("already_governed");
-        }
-        return new GovernedChatModel(control, Objects.requireNonNull(model));
+        return ModelAdapters.guard(control, model);
     }
 
     public StreamingChatModel guardStreamingModel(StreamingChatModel model) {
@@ -98,16 +96,7 @@ public final class LangChain4jGovernance {
 
     public StreamingChatModel guardStreamingModel(
             StreamingChatModel model, StreamingLimits limits) {
-        Objects.requireNonNull(model);
-        control.requirePoints(
-                Set.of(InterventionPoint.PRE_MODEL_CALL, InterventionPoint.POST_MODEL_CALL));
-        if (!model.listeners().isEmpty()) {
-            throw new GovernanceException("raw_model_listeners_unsupported");
-        }
-        if (model instanceof GovernedStreamingChatModel) {
-            throw new GovernanceException("already_governed");
-        }
-        return new GovernedStreamingChatModel(control, model, Objects.requireNonNull(limits));
+        return StreamingAdapters.guard(control, model, limits);
     }
 
     public static BufferedTokenStream buffered(TokenStream stream) {
@@ -117,50 +106,21 @@ public final class LangChain4jGovernance {
         return buffered;
     }
 
-    private void requireData(DataResource resource, DataResource.Kind kind) {
-        control.requirePoints(
-                Set.of(InterventionPoint.PRE_DATA_ACCESS, InterventionPoint.POST_DATA_ACCESS));
-        if (resource.kind() != kind) {
-            throw new GovernanceException("data_resource_kind_mismatch");
-        }
-    }
-
     public ContentRetriever guardRetriever(DataResource resource, ContentRetriever retriever) {
-        requireData(Objects.requireNonNull(resource), DataResource.Kind.RETRIEVAL);
-        Objects.requireNonNull(retriever);
-        if (retriever instanceof GovernedContentRetriever) {
-            throw new GovernanceException("already_governed");
-        }
-        if (retriever
-                .getClass()
-                .getName()
-                .equals("dev.langchain4j.rag.content.retriever.ListeningContentRetriever")) {
-            throw new GovernanceException("data_listener_unsupported");
-        }
-        return new GovernedContentRetriever(control, resource, retriever);
+        return RetrievalAdapters.guard(control, resource, retriever);
     }
 
     public ChatMemory guardMemory(DataResource resource, ChatMemory memory) {
-        requireData(Objects.requireNonNull(resource), DataResource.Kind.MEMORY);
-        if (memory instanceof GovernedChatMemory) {
-            throw new GovernanceException("already_governed");
-        }
-        return new GovernedChatMemory(control, resource, Objects.requireNonNull(memory));
+        return MemoryAdapters.guard(control, resource, memory);
     }
 
     public ToolExecutor guardTool(String name, ToolExecutor executor) {
-        control.requirePoints(
-                Set.of(InterventionPoint.PRE_TOOL_CALL, InterventionPoint.POST_TOOL_CALL));
-        if (executor instanceof GovernedToolExecutor) {
-            throw new GovernanceException("already_governed");
-        }
-        return new GovernedToolExecutor(control, name, Objects.requireNonNull(executor));
+        return ToolAdapters.guard(control, name, executor);
     }
 
     /** 返回受模型/工具策略治理的固定命令；不能提供任意脚本执行能力。 */
     public ToolExecutor guardCommand(FixedCommand command) {
-        Objects.requireNonNull(command);
-        return guardTool(command.name(), new CommandToolExecutor(control, command));
+        return ToolAdapters.command(control, command);
     }
 
     public <T> Builder<T> aiServices(Class<T> type) {
@@ -258,13 +218,13 @@ public final class LangChain4jGovernance {
                 throw new GovernanceException("data_component_conflict");
             }
             augmentor =
-                    new SingleSourceAugmentor(
+                    RetrievalAdapters.singleSource(
                             governance.control, governance.guardRetriever(resource, retriever));
             return this;
         }
 
         public Builder<T> chatMemory(ChatMemory memory) {
-            if (governedMemoryProvider || this.memory instanceof GovernedChatMemory) {
+            if (governedMemoryProvider || MemoryAdapters.isGoverned(this.memory)) {
                 throw new GovernanceException("data_component_conflict");
             }
             this.memory = memory;
@@ -272,7 +232,7 @@ public final class LangChain4jGovernance {
         }
 
         public Builder<T> chatMemoryProvider(ChatMemoryProvider value) {
-            if (governedMemoryProvider || memory instanceof GovernedChatMemory) {
+            if (governedMemoryProvider || MemoryAdapters.isGoverned(memory)) {
                 throw new GovernanceException("data_component_conflict");
             }
             memoryProvider = value;
@@ -280,7 +240,7 @@ public final class LangChain4jGovernance {
         }
 
         public Builder<T> retrievalAugmentor(RetrievalAugmentor augmentor) {
-            if (this.augmentor instanceof SingleSourceAugmentor) {
+            if (RetrievalAdapters.isSingleSource(this.augmentor)) {
                 throw new GovernanceException("data_component_conflict");
             }
             this.augmentor = augmentor;
@@ -312,7 +272,7 @@ public final class LangChain4jGovernance {
                                     .description("执行宿主注册的固定命令，参数只允许预定义选项")
                                     .parameters(schema.build())
                                     .build(),
-                            new CommandToolExecutor(governance.control, command)));
+                            ToolAdapters.registration(command)));
         }
 
         public Builder<T> tools(List<AiServiceTool> values) {
@@ -400,15 +360,15 @@ public final class LangChain4jGovernance {
                 builder.systemMessageProvider(memoryId -> systemMessage);
             }
             if (memory != null) {
-                builder.chatMemory(new ContextChatMemory(governance.control, memory));
+                builder.chatMemory(MemoryAdapters.context(governance.control, memory));
             }
             if (memoryProvider != null) {
                 builder.chatMemoryProvider(
-                        id -> new ContextChatMemory(governance.control, memoryProvider.get(id)));
+                        id -> MemoryAdapters.context(governance.control, memoryProvider.get(id)));
             }
             if (augmentor != null) {
                 builder.retrievalAugmentor(
-                        new ContextRetrievalAugmentor(governance.control, augmentor));
+                        RetrievalAdapters.context(governance.control, augmentor));
             }
             if (errorHandler != null) {
                 builder.toolExecutionErrorHandler(errorHandler);

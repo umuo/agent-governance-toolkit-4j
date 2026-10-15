@@ -1,4 +1,4 @@
-package io.agt.langchain4j;
+package io.agt.langchain4j.internal.rag;
 
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.rag.AugmentationRequest;
@@ -9,6 +9,7 @@ import dev.langchain4j.rag.content.injector.DefaultContentInjector;
 import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.rag.query.Query;
 import io.agt.core.AgentControl;
+import io.agt.langchain4j.internal.message.TextProjection;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 

@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-14",
+  "date": "2026-10-15",
   "timezone": "Asia/Shanghai",
   "sdk": "0.6.0-SNAPSHOT",
   "langchain4j": "1.20.0",
@@ -10,10 +10,10 @@
     {
       "jdk": "17.0.11",
       "coreTests": 74,
-      "adapterTests": 111,
+      "adapterTests": 113,
       "httpTests": 2,
       "sseTests": 1,
-      "total": 216,
+      "total": 218,
       "failures": 0,
       "errors": 0,
       "skipped": 0,
@@ -35,10 +35,10 @@
     {
       "jdk": "21.0.4",
       "coreTests": 74,
-      "adapterTests": 111,
+      "adapterTests": 113,
       "httpTests": 2,
       "sseTests": 1,
-      "total": 216,
+      "total": 218,
       "failures": 0,
       "errors": 0,
       "skipped": 0,
@@ -94,5 +94,13 @@
     "syntheticParentEnvironmentMarkerNotInherited": true
   },
   "sandboxSdk": "io.github.umuo:agent-sandbox-sdk:0.1.0-alpha.1",
-  "jna": "5.19.1"
+  "jna": "5.19.1",
+  "packageRefactor": {
+    "date": "2026-10-15",
+    "existingPublicSignaturesAndDescriptorsUnchanged": true,
+    "internalResponsibilityPackages": 8,
+    "internalPackageDependencyCycleDetected": false,
+    "commandRegistrationTests": 2,
+    "unguardedCommandRegistrationExecutable": false
+  }
 }

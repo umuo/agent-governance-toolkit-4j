@@ -1,10 +1,11 @@
-package io.agt.langchain4j;
+package io.agt.langchain4j.internal.rag;
 
 import dev.langchain4j.rag.AugmentationRequest;
 import dev.langchain4j.rag.AugmentationResult;
 import dev.langchain4j.rag.RetrievalAugmentor;
 import io.agt.core.AgentControl;
 import io.agt.core.HostSession;
+import io.agt.langchain4j.internal.concurrent.AsyncSources;
 import java.util.concurrent.CompletableFuture;
 
 /**

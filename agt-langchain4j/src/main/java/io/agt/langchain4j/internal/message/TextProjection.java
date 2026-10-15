@@ -1,4 +1,4 @@
-package io.agt.langchain4j;
+package io.agt.langchain4j.internal.message;
 
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.AiMessage;
@@ -8,7 +8,9 @@ import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
 import io.agt.core.GovernanceException;
+import io.agt.core.HostSession;
 import io.agt.core.JsonValues;
+import io.agt.langchain4j.internal.data.DataAccessSupport;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -20,10 +22,10 @@ import java.util.Objects;
  *
  * <p>只读元数据和可改写正文分开；不允许策略改写角色、工具名、调用 ID 或消息数量。
  */
-final class TextProjection {
+public final class TextProjection {
     private TextProjection() {}
 
-    static Map<String, Object> message(ChatMessage message) {
+    public static Map<String, Object> message(ChatMessage message) {
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("role", message.type().name());
         if (message instanceof SystemMessage m) {
@@ -72,7 +74,7 @@ final class TextProjection {
         return p;
     }
 
-    static ChatMessage replace(ChatMessage original, Object value) {
+    public static ChatMessage replace(ChatMessage original, Object value) {
         Map<String, Object> p = object(value);
         Map<String, Object> before = message(original);
         sameKeys(before, p);
@@ -129,7 +131,7 @@ final class TextProjection {
         return null;
     }
 
-    static Map<String, Object> object(Object value) {
+    public static Map<String, Object> object(Object value) {
         if (!(value instanceof Map<?, ?> m)
                 || m.keySet().stream().anyMatch(k -> !(k instanceof String))) {
             unsupported();
@@ -139,44 +141,63 @@ final class TextProjection {
         return map;
     }
 
-    static Map<String, Object> nullableObject(Object value) {
+    public static Map<String, Object> nullableObject(Object value) {
         return value == null ? null : object(value);
     }
 
-    static List<?> list(Object v) {
+    public static List<?> list(Object v) {
         if (!(v instanceof List<?>)) {
             unsupported();
         }
         return (List<?>) v;
     }
 
-    static String nullableString(Object v) {
+    public static String nullableString(Object v) {
         if (v != null && !(v instanceof String)) {
             unsupported();
         }
         return (String) v;
     }
 
-    static String requiredString(Object v) {
+    public static String requiredString(Object v) {
         if (!(v instanceof String)) {
             unsupported();
         }
         return (String) v;
     }
 
-    static void sameKeys(Map<String, Object> before, Map<String, Object> after) {
+    public static void sameKeys(Map<String, Object> before, Map<String, Object> after) {
         if (!before.keySet().equals(after.keySet())) {
             unsupported();
         }
     }
 
-    static void fixed(Map<String, Object> before, Map<String, Object> after, String key) {
+    public static void fixed(Map<String, Object> before, Map<String, Object> after, String key) {
         if (!Objects.equals(before.get(key), after.get(key))) {
             unsupported();
         }
     }
 
-    static void unsupported() {
+    public static void unsupported() {
         throw new GovernanceException("transform_or_shape_unsupported");
+    }
+
+    public static List<Object> messages(List<ChatMessage> messages, HostSession session) {
+        DataAccessSupport.limit(messages.size(), session);
+        return messages.stream().map(m -> (Object) TextProjection.message(m)).toList();
+    }
+
+    public static List<ChatMessage> replaceMessages(
+            List<ChatMessage> original, Object value, HostSession session) {
+        var values = TextProjection.list(value);
+        DataAccessSupport.limit(values.size(), session);
+        if (original.size() != values.size()) {
+            TextProjection.unsupported();
+        }
+        var result = new ArrayList<ChatMessage>();
+        for (int i = 0; i < values.size(); i++) {
+            result.add(TextProjection.replace(original.get(i), values.get(i)));
+        }
+        return List.copyOf(result);
     }
 }

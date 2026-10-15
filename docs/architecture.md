@@ -18,6 +18,33 @@
 
 现有 langchain4j-runtime-security 用布尔裁决进行检测阻断，Java AGT 需要改写和审批，因此独立实现核心，复用设计经验而非套用旧内核。未复制微软或参考项目源文件。
 
+## LangChain4j 适配器分包
+
+适配器按职责组织。根包 `io.agt.langchain4j` 只保留四个既有公开类型：`LangChain4jGovernance`（包括嵌套 Builder）、`BufferedTokenStream`、`StreamingLimits`、`MemoryBinding`。调用方无需修改 import，原有方法签名和返回类型保持不变。
+
+| 内部包 | 职责与主要类型 |
+|---|---|
+| `internal.model` | `GovernedChatModel`；同步与异步模型治理 |
+| `internal.tool` | `GovernedToolExecutor`、`CommandToolExecutor`；工具与固定命令治理 |
+| `internal.streaming` | 流式模型、`StreamingCollector`、`BufferedStream` 状态机 |
+| `internal.memory` | 记忆读写授权与上下文桥接 |
+| `internal.rag` | 检索器、增强器、`RetrievalProjection` 查询/文档投影 |
+| `internal.message` | `TextProjection`；共享消息正文投影、消息列表校验与安全复建 |
+| `internal.data` | `DataAccessSupport`；记忆与检索共享的条目限额和失败终止语义 |
+| `internal.concurrent` | `AsyncSources`；异步组合、异常归一化与源取消传播 |
+
+具体模型、工具、流式、记忆和检索包装类保持包级可见，不为了跨包调用全部改成 public。门面通过 ModelAdapters、ToolAdapters、StreamingAdapters、MemoryAdapters、RetrievalAdapters 五个内部工厂装配组件；工厂保留所需干预点、重复包装、原始 listener 和数据种类检查。共享消息投影、数据限额、异步辅助与流控制协议因跨包调用具有 public 可见性，但不是稳定应用 API。classpath 下的 `internal` 是 API 约定，不是 JVM 强制模块封装或安全沙箱。
+
+旧公开 `BufferedTokenStream` 委托内部 `BufferedStream` 管理启动、回调、交付和取消，链式注册仍返回同一个公开门面对象。拆分前后的公开类与嵌套 Builder 通过 javap 的方法签名/描述符比对保持一致。
+
+原混合的 DataProjection 已拆开：消息及消息列表属于 `internal.message`，查询和文档来源复建属于 `internal.rag`，共享限额与故障语义属于 `internal.data`。依赖从模型/工具/记忆/检索指向共享辅助包；共享辅助包不反向依赖具体包装实现。
+
+固定命令需要特别处理：Builder 跨包传递的是**不可执行的注册描述**；只有经过 ToolAdapters.guard 后才在工具包内部建立真实 CommandToolExecutor。注册描述的同步、上下文与异步入口均不能启动命令，并校验其工具名称不能错绑。没有对外暴露可直接创建原始命令执行器的工厂。
+
+2026-10-15 验收：JDK 17.0.11 / 21.0.4 各通过 218 项测试、40 个原有演示场景、2 个 YAML 示例及 25 个独立安全教学类；公开签名/描述符比对和内部包无循环依赖检查通过。没有新增性能测量或 Sonar 扫描。
+
+源码阅读顺序：根包门面 → 对应职责的 Adapters 工厂 → 同包 Governed 实现 → HostSession。流式用户操作从旧 BufferedTokenStream 门面跟进内部 BufferedStream；RAG 和 Memory 共用消息投影，但各自保留独立数据访问职责。
+
 ## 依赖与调用链
 
 ```mermaid

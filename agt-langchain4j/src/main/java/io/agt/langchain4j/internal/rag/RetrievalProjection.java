@@ -1,16 +1,15 @@
-package io.agt.langchain4j;
+package io.agt.langchain4j.internal.rag;
 
 import dev.langchain4j.data.document.Metadata;
-import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.content.ContentMetadata;
 import dev.langchain4j.rag.query.Query;
-import io.agt.core.GovernanceException;
 import io.agt.core.HostSession;
-import io.agt.core.InterventionPoint;
 import io.agt.core.JsonValues;
+import io.agt.langchain4j.internal.data.DataAccessSupport;
+import io.agt.langchain4j.internal.message.TextProjection;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
@@ -19,37 +18,12 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * 数据访问投影保留身份和来源元数据；只改写查询文本、文档文本和文本消息。
+ * 检索查询与文档投影：保留来源和身份元数据，仅改写允许的正文。
  *
  * <p>InvocationContext 保留原生关联；来源字段复建使用检查后的快照。
  */
-final class DataProjection {
-    private DataProjection() {}
-
-    static void limit(int size, HostSession session) {
-        if (size > session.dataLimits().maxItems()) {
-            throw new GovernanceException("data_items_exceeded");
-        }
-    }
-
-    static List<Object> messages(List<ChatMessage> messages, HostSession session) {
-        limit(messages.size(), session);
-        return messages.stream().map(m -> (Object) TextProjection.message(m)).toList();
-    }
-
-    static List<ChatMessage> replaceMessages(
-            List<ChatMessage> original, Object value, HostSession session) {
-        var values = TextProjection.list(value);
-        limit(values.size(), session);
-        if (original.size() != values.size()) {
-            TextProjection.unsupported();
-        }
-        var result = new ArrayList<ChatMessage>();
-        for (int i = 0; i < values.size(); i++) {
-            result.add(TextProjection.replace(original.get(i), values.get(i)));
-        }
-        return List.copyOf(result);
-    }
+final class RetrievalProjection {
+    private RetrievalProjection() {}
 
     static Map<String, Object> query(Query query, HostSession session) {
         var map = new LinkedHashMap<String, Object>();
@@ -67,7 +41,7 @@ final class DataProjection {
                     "history",
                     query.metadata().chatMemory() == null
                             ? null
-                            : messages(query.metadata().chatMemory(), session));
+                            : TextProjection.messages(query.metadata().chatMemory(), session));
             md.put(
                     "system",
                     query.metadata().systemMessage() == null
@@ -114,14 +88,14 @@ final class DataProjection {
             TextProjection.fixed(oldMetadata, metadata, "history");
         } else {
             builder.chatMemory(
-                    replaceMessages(
+                    TextProjection.replaceMessages(
                             originalMetadata.chatMemory(), metadata.get("history"), session));
         }
         return Query.from(text, builder.build());
     }
 
     static List<Object> contents(List<Content> contents, HostSession session) {
-        limit(contents.size(), session);
+        DataAccessSupport.limit(contents.size(), session);
         var result = new ArrayList<Object>();
         for (var content : contents) {
             var value = new LinkedHashMap<String, Object>();
@@ -181,13 +155,5 @@ final class DataProjection {
                             metadata));
         }
         return List.copyOf(result);
-    }
-
-    static GovernanceException failure(HostSession session, RuntimeException error) {
-        String code = error instanceof GovernanceException g ? g.code() : "data_access_failed";
-        if (session.budgetSnapshot().failed()) {
-            return session.refuse(code);
-        }
-        return session.fail(InterventionPoint.PRE_DATA_ACCESS, code);
     }
 }

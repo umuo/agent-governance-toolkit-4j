@@ -1,4 +1,4 @@
-package io.agt.langchain4j;
+package io.agt.langchain4j.internal.tool;
 
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.TextContent;
@@ -11,6 +11,8 @@ import io.agt.core.HostSession;
 import io.agt.core.Identifiers;
 import io.agt.core.InterventionPoint;
 import io.agt.core.JsonValues;
+import io.agt.langchain4j.internal.concurrent.AsyncSources;
+import io.agt.langchain4j.internal.message.TextProjection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;

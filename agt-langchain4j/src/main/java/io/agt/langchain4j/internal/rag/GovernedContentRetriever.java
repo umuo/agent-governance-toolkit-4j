@@ -1,4 +1,4 @@
-package io.agt.langchain4j;
+package io.agt.langchain4j.internal.rag;
 
 import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.content.retriever.ContentRetriever;
@@ -9,6 +9,8 @@ import io.agt.core.GovernanceException;
 import io.agt.core.HostSession;
 import io.agt.core.data.DataOperation;
 import io.agt.core.data.DataResource;
+import io.agt.langchain4j.internal.concurrent.AsyncSources;
+import io.agt.langchain4j.internal.data.DataAccessSupport;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -37,13 +39,13 @@ final class GovernedContentRetriever implements ContentRetriever {
             return session.dataOperationPrepared(
                     resource,
                     DataOperation.RETRIEVE,
-                    DataProjection.query(query, session),
-                    v -> DataProjection.replaceQuery(query, v, session),
+                    RetrievalProjection.query(query, session),
+                    v -> RetrievalProjection.replaceQuery(query, v, session),
                     delegate::retrieve,
-                    result -> DataProjection.contents(result, session),
-                    (result, v) -> DataProjection.replaceContents(result, v, session));
+                    result -> RetrievalProjection.contents(result, session),
+                    (result, v) -> RetrievalProjection.replaceContents(result, v, session));
         } catch (RuntimeException error) {
-            throw DataProjection.failure(session, error);
+            throw DataAccessSupport.failure(session, error);
         }
     }
 
@@ -56,18 +58,18 @@ final class GovernedContentRetriever implements ContentRetriever {
             return session.dataOperationAsyncPrepared(
                     resource,
                     DataOperation.RETRIEVE,
-                    DataProjection.query(query, session),
-                    v -> DataProjection.replaceQuery(query, v, captured),
+                    RetrievalProjection.query(query, session),
+                    v -> RetrievalProjection.replaceQuery(query, v, captured),
                     prepared ->
                             AsyncSources.fallback(
                                     captured,
                                     delegate.retrieveAsync(prepared),
                                     () -> delegate.retrieve(prepared)),
-                    result -> DataProjection.contents(result, captured),
-                    (result, v) -> DataProjection.replaceContents(result, v, captured));
+                    result -> RetrievalProjection.contents(result, captured),
+                    (result, v) -> RetrievalProjection.replaceContents(result, v, captured));
         } catch (RuntimeException error) {
             return CompletableFuture.failedFuture(
-                    session == null ? error : DataProjection.failure(session, error));
+                    session == null ? error : DataAccessSupport.failure(session, error));
         }
     }
 
