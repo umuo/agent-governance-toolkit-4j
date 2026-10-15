@@ -1,55 +1,51 @@
-# v0.6 当前沙箱接入验收
+# v0.6 SDK alpha.2 接入验收
 
-本阶段直接引用 Central `io.github.umuo:agent-sandbox-sdk:0.1.0-alpha.1`，没有使用 sandbox-demo 正在维护的源码或未发布 API。新增可选 agt-sandbox，复用原有固定命令工具治理。
+2026-10-15，固定消费 Central `io.github.umuo:agent-sandbox-sdk:0.1.0-alpha.2` 的正式二进制。没有编译 sandbox-demo 工作区替代发布版本，也没有使用未发布 API。版本未升级 AGT 制品号，仍为 0.6.0-SNAPSHOT。
 
-## 新增证据
+发布的 79 个 Java 源文件与本轮审查的本地 SDK 源码逐一一致。制品 SHA-256：`f21bd0791b6f38641ac75062f4c6d9102d90eb9ff5dac836f1fc9866bc3e9769`。来源：[Central POM](https://repo.maven.apache.org/maven2/io/github/umuo/agent-sandbox-sdk/0.1.0-alpha.2/agent-sandbox-sdk-0.1.0-alpha.2.pom)；完整环境与计数见 [验收 JSON](evidence/sandbox-verification.json)。旧版原始结论保留在 [alpha.1 历史](sandbox-verification-alpha1.md)。
 
-| 行为 | 证据 |
-|---|---|
-| execute / executeWithContext / executeAsync 同一治理路径 | effectiveArgumentsAndRedactedResultsReachRealToolEntryPoints；SDK 收到 new，交付 masked，工具计数 1，无原文回调/额外环境/stdin。 |
-| 权限、审批拒绝零 SDK 调用 | permissionsAndApprovalRefusalsNeverReachSdk |
-| 审批允许绑定有效参数 | approvalAllowedExecutesOnceAndUnsupportedCapabilitiesRefuse |
-| 截断、聚合超限、UTF-8、退出、超时、SDK 异常安全关闭 | unsafeSdkResultsAndErrorsNeverPropagateRawContent，9 类结果；SDK 私有错误不进入公开消息。 |
-| HOST 需显式 opt-in，目录/能力/路径搜索不得绕过 | hostReadsRequireOptInAndBindingMustMatch；unsupported capability 明确拒绝。 |
-| SDK DTO 长度约束准备阶段检查 | sdkRequestConstraintsAreCheckedBeforeExecutionCount，工具计数为 0。 |
-| SDK 不响应取消时调用方不挂起、后端不复用 | uncooperativeSdkCannotBlockCallerOrReuseBackend，覆盖 timeout/revoke/close/cancel。 |
-| 零队列、有限容量、关闭后拒绝 | noQueueAndClosedBackendRefuseWithoutAdditionalSdkCalls |
-| 晚到取消不误中断池线程的新任务 | lateCancellationDoesNotInterruptReusedSdkWorker |
-| 真实 AI Services 工具循环 | realAiServicesLoopUsesCheckedSandboxResult；真实框架 + fake SDK runner 接入契约，两个模型调用、一个工具调用。 |
-| 真 SDK 工作区写与脱敏交付 | hostOptInAllowsWorkspaceWriteAndDeliversRedactedOutput |
-| 只读配置不恢复隐式写权限 | readOnlyWorkspaceDoesNotRegainImplicitWriteGrant |
-| 真 SDK 工作区外写拒绝 | outsideWriteIsDeniedAndOriginalCanaryUnchanged；合成 canary 内容未改变。 |
-| 真 SDK 网络拒绝 | denyNetworkPreventsLoopbackConnectionWithAllowedControl；ALLOW 对照接入回环服务，DENY 没有接入。 |
-| strict 没有降级 | strictReadEitherPreflightRefusesOrActuallyBlocksUndeclaredCanary；本机 alpha.1 profile 被拒绝，目标启动标记不存在。 |
+## 与 SDK 维护要求的对应
 
-前 10 行是接入/故障契约，fake runner 不证明内核隔离；后 5 行使用真实 Central 制品和 macOS Seatbelt。原生测试在其他 OS 明确跳过，不能当作跨平台通过。
+| 需求 | 当前接入与证据 | 已验证边界 |
+|---|---|---|
+| SDK-01 实际策略预检 / 严格读取 | prepare 调用 client.validate；预检拒绝时目标次数与工具预算均为 0。真实严格模式允许 printf/sh 和显式声明 JDK runtime 的 Java，拒绝外部 canary | macOS 15.5 arm64，目标 JDK 17 / 21；未验证 Windows/Linux 原生 |
+| SDK-02 取消与独立回收 | 使用 start 返回的执行句柄；Future 取消实际传入 SDK control；四类不合作任务、晚到取消继续回归；workerFinished 前占住容量 | completion 与 cleanup 独立；macOS 进程树仍 BEST_EFFORT，正常退出的进程 UNKNOWN 被明确接受，不作为强回收证明；取消/超时仍保守隔离 |
+| SDK-03 输出超限终止 | SDK 请求强制 TERMINATE + retained、每流和聚合额度；真实单进程持续输出在 5 秒期限前（验收阈值 3 秒）终止，结果不交付 | 不是原子终止或副作用回滚；停止 shell 子进程后，shell 仍可能短暂继续执行 |
+| SDK-04 能力维度 | SDK admission 按实际能力拒绝硬限制；测试 coarse FULL 也不能放行不支持的 memory 硬限制 | 只有本机原生证据；未运行其他平台的限额强制测试 |
+| SDK-05 稳定错误 / 脱敏 | 10 类 SDK code 经真实 SDK 执行路径映射，不匹配自由文本；合成 debug marker 不出现在公开异常 | 不记录 SDK debugMessage/debugCause；并不认证所有宿主自定义日志实现 |
+| SDK-06 严格环境 / 私有目录 | 默认 PATH 只含程序父目录；宿主可固定多个工具目录；无额外环境、stdin 或原文回调。真实 env / live Bash 验证 PATH 和私有 HOME 清理 | 工具目录必须宿主保护；没有完整父进程危险变量注入矩阵，不能声称任意工具链完整性已验证 |
+| SDK-07 硬限额与隔离机制 | 重建请求保留全部 resourceLimits、requiredIsolation；不支持的硬限制在工具执行前拒绝 | macOS 不提供这些硬限额；未证明 VM / cgroup 的资源强制，也未开放核心任意生成代码执行 |
 
-## 当前实际行为
+## 自动化测试与真实隔离
 
-本机 macOS 15.5 arm64：HOST/DENY 的工作区写隔离及网络拒绝有效；HOST 不提供读取机密隔离。DECLARED_ONLY 的 profile 在 alpha.1 下不可用，工具收到 sandbox_unavailable，没有目标 workspaceWrite。适配器没有修改 SDK 权限或自动使用普通进程。
+| JDK | core | LangChain4j | sandbox 契约 / 原生 | 核心及沙箱小计 | live 发现 / 通过 / 跳过 | 全部发现 / 通过 |
+|---|---:|---:|---:|---:|---:|---:|
+| 17.0.11 | 74 | 116 | 39 / 9 | 238 | 38 / 37 / 1 | 276 / 275 |
+| 21.0.4 | 74 | 116 | 39 / 9 | 238 | 38 / 37 / 1 | 276 / 275 |
 
-七个新演示：host-allowed、async-allowed → masked/写入生效；permission-denied → 无 SDK 调用/工具计数 0；strict → sandbox_unavailable/无目标写入/执行尝试计数 1；outside-write → sandbox_exit_denied/canary 未改变；output-limit → sandbox_output_limit；timeout → sandbox_timeout。
+两个 JDK 都通过 clean verify，没有失败或错误。唯一跳过项是需要显式设置 `AGT_LIVE_TEST=true` 的真实收费 provider 测试；本轮未启用，不算模型服务验收通过。其余测试使用本机 HTTP/SSE 模拟端点、合成数据和临时工作区，无外部模型 key。
 
-调用方等待有界，但 SDK 后台工作可能继续。取消/超时/未知执行失败后 backend 永久隔离，不能用重建实例替代外部回收核验。源码级保护避免了已完成任务的晚到取消中断其他任务正在使用的池线程。未提供 SDK 回收确认、CPU/内存/磁盘/PID 硬限额，也未运行 Windows/Linux 原生后端。
+SDK 契约新增 16 项（预检、资源要求、10 类稳定错误、协作取消、两类回收异常），加既有 23 项；fake runner 只证明接入行为，不证明内核隔离。9 项真实 Central 原生测试覆盖 HOST 写入/外部写拒绝、只读工作区、strict 无回退、回环网络 ALLOW 对照 / DENY、严格读取成功 / 外部读取拒绝、持续输出提前终止、严格环境和显式 JDK runtime。
 
-## 验证记录
+Live Bash 在 HOST 与严格读取两种配置下都执行真实文件操作与越界拒绝测试，并验证私有 HOME 已清理、非零退出诊断及 executeReport 的结果治理契约。工具供应的 PATH 明确为 `/bin`、`/usr/bin`，不从宿主 PATH 扩展。
 
-2026-10-14，Java 17 编译基线，LangChain4j 1.20.0，SDK 0.1.0-alpha.1 / JNA 5.19.1，macOS arm64。最终 JDK 矩阵及测试计数见 [sandbox-verification.json](evidence/sandbox-verification.json)。
+每个 JDK 另实际运行 40 个原有演示场景、2 个 YAML 示例、25 个独立安全教学类。严格模式演示当前为 `masked / workspaceWrite=true / toolCalls=1`；旧版 strict 不可用的结果只留在历史验收。
 
-| JDK | core | LangChain4j（含 HTTP/SSE） | sandbox 契约 / 原生 | 合计 | 失败 / 错误 / 跳过 |
-|---|---:|---:|---:|---:|---|
-| 17.0.11 | 74 | 116 | 23 / 5 | 218 | 0 / 0 / 0 |
-| 21.0.4 | 74 | 116 | 23 / 5 | 218 | 0 / 0 / 0 |
+## 故障与回收边界
 
-两个 JDK 均通过 clean verify、40 个原有演示场景与 2 个 YAML 示例。安全教学补充另有 ASI02 的 16 个、ASI05 的 9 个独立场景类，两个 JDK 均实际运行通过；其中修复审批线程超时错误码竞争，增加 2 项核心回归测试。见 [逐场景学习指南](security-demos.md)。MkDocs 严格构建通过，浏览器确认了新增沙箱指南导航与首页 Mermaid 流程图渲染。
+- 预检、权限、参数、审批拒绝在执行前发生；目标未执行，工具预算未提交。SDK 真正进入执行后的错误保留尝试计数。
+- 管道、临时文件、宿主资源的 UNKNOWN / FAILED 或进程 FAILED 均拒绝交付并隔离 backend；SDK 明确 CLEANUP_FAILED 同样隔离。
+- macOS 正常退出允许其明确声明的进程树 BEST_EFFORT / UNKNOWN；不承诺全部后代已结束。取消、超时及不合作任务继续保守隔离，不能靠重建 backend 掩盖活跃进程。
+- 超限终止不是事务。早期探针中观察到停止 shell 子进程后 shell 仍可能短暂写文件；最终用单进程持续输出验证有限终止，不用“后续文件必不存在”冒充原子保证。
+- 未修改 sandbox-demo 仓库，未调整宿主账号或防火墙，未自动发布/推送。未新增性能测量或 Sonar 扫描。
 
-原有模型/工具/异步/流式/RAG/记忆/固定命令测试全部回归；新增 SDK 依赖没有进入单独 agt-core/agt-langchain4j 的运行时依赖。验证使用本机 HTTP/SSE 模拟端点与合成 canary，无外部模型 API key、真实秘密或不可信下载程序。
+运行命令：
 
 ```bash
 bash scripts/verify-java-matrix.sh
 java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar sandbox all
 ```
 
-本次没有新增性能测量或 Sonar 扫描，不将单元测试数换算为 OWASP 覆盖率。ASI05 新增 OS 后端的具体已验证措施，但仍不是任意代码或 VM 级安全保证。历史 [v0.5 验收](command-verification.md) 与 [接入前调研](sandbox-integration-review.md) 保留原始阶段结论；维护中的下一 SDK 版本须完成真实依赖回归后再升级。
+MkDocs 严格构建通过；浏览器已确认当前/历史验收导航及首页 Mermaid 渲染。
 
-2026-10-15 分包回归：适配器新增 2 项固定命令跨包装配保护测试，当前合计 218 项。两个 JDK 均通过完整矩阵与所有教学类；既有公开类型及 Builder 的 javap 签名/描述符保持不变，8 个内部职责包无循环依赖。结构见 [架构与扩展](architecture.md)。
+接入与安全语义见 [当前指南](sandbox-guide.md)，ASI02 / ASI05 按类阅读见 [安全教学](security-demos.md)。

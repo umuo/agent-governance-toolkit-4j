@@ -75,7 +75,31 @@ class SandboxCommandBackendTest {
         SandboxResult run(SandboxRequest request) throws SandboxException, InterruptedException;
     }
 
+    @FunctionalInterface
+    interface Validate {
+        void run(SandboxRequest request) throws SandboxException, InterruptedException;
+    }
+
     static SandboxClient client(Execute execute) {
+        return client(execute, request -> {});
+    }
+
+    static SandboxClient client(Execute execute, Validate validate) {
+        return client(
+                execute,
+                validate,
+                new io.github.sandboxdemo.api.SandboxCleanupResult(
+                        io.github.sandboxdemo.api.SandboxCleanupState.NOT_REQUIRED,
+                        io.github.sandboxdemo.api.SandboxCleanupState.NOT_REQUIRED,
+                        io.github.sandboxdemo.api.SandboxCleanupState.NOT_REQUIRED,
+                        io.github.sandboxdemo.api.SandboxCleanupState.NOT_REQUIRED,
+                        true));
+    }
+
+    static SandboxClient client(
+            Execute execute,
+            Validate validate,
+            io.github.sandboxdemo.api.SandboxCleanupResult cleanup) {
         var capabilities =
                 new SandboxCapabilities(
                         SandboxPlatform.MACOS,
@@ -90,6 +114,40 @@ class SandboxCommandBackendTest {
                         new SandboxRunner() {
                             public String backendName() {
                                 return "fake";
+                            }
+
+                            @Override
+                            public boolean supportsOutputPolicy(SandboxPolicy policy) {
+                                return true;
+                            }
+
+                            @Override
+                            public boolean supportsEnvironment(SandboxRequest request) {
+                                return true;
+                            }
+
+                            @Override
+                            public void validate(SandboxRequest request)
+                                    throws SandboxException, InterruptedException {
+                                validate.run(request);
+                            }
+
+                            @Override
+                            public io.github.sandboxdemo.api.SandboxBackendInfo backendInfo() {
+                                return io.github.sandboxdemo.api.SandboxBackendInfo.current(
+                                        SandboxPlatform.MACOS, "fake", null);
+                            }
+
+                            @Override
+                            public SandboxResult execute(
+                                    SandboxRequest request,
+                                    io.github.sandboxdemo.api.SandboxExecutionControl control)
+                                    throws SandboxException, InterruptedException {
+                                try {
+                                    return execute.run(request);
+                                } finally {
+                                    control.reportCleanup(cleanup);
+                                }
                             }
 
                             public SandboxResult execute(SandboxRequest request)
@@ -183,6 +241,14 @@ class SandboxCommandBackendTest {
                                     assertEquals(List.of("new"), r.command().arguments());
                                     assertEquals(NetworkPolicy.DENY, r.policy().networkPolicy());
                                     assertTrue(r.environment().isEmpty());
+                                    assertTrue(r.executionEnvironment().isStrict());
+                                    assertEquals(
+                                            io.github.sandboxdemo.api.OutputLimitAction.TERMINATE,
+                                            r.policy().onOutputLimit());
+                                    assertEquals(
+                                            io.github.sandboxdemo.api.OutputCallbackMode.RETAINED,
+                                            r.policy().outputCallbackMode());
+                                    assertTrue(r.policy().maxCombinedOutputBytes() > 0);
                                     assertEquals(0, r.standardInput().length);
                                     assertTrue(
                                             r.stdoutConsumer() == null
@@ -266,7 +332,7 @@ class SandboxCommandBackendTest {
         "timeout,sandbox_timeout",
         "unavailable,sandbox_unavailable",
         "failure,sandbox_execution_failed",
-        "null,sandbox_invalid_result"
+        "null,sandbox_execution_failed"
     })
     void unsafeSdkResultsAndErrorsNeverPropagateRawContent(String kind, String code)
             throws Exception {
@@ -344,6 +410,21 @@ class SandboxCommandBackendTest {
                 assertEquals(code, error.code());
                 assertFalse(error.getMessage().contains("private"));
                 assertEquals(1, session.budgetSnapshot().toolCalls());
+                if (Set.of("timeout", "failure", "null").contains(kind)) {
+                    // fake SDK 已声明没有残留资源，也不能自动撤销本后端的终止隔离。
+                    assertEquals(
+                            "sandbox_cleanup_unconfirmed",
+                            assertThrows(
+                                            GovernanceException.class,
+                                            () ->
+                                                    backend.prepare(
+                                                            new CommandExecution(
+                                                                    directory.resolve("tool"),
+                                                                    directory.toRealPath(),
+                                                                    List.of(),
+                                                                    CommandLimits.DEFAULT)))
+                                    .code());
+                }
                 assertTrue(session.budgetSnapshot().failed());
             }
         }

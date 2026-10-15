@@ -63,9 +63,11 @@ class BashToolTest {
                         "ok", tool.execute(request("printf ok > output; /bin/cat output"), null));
                 assertEquals("ok", Files.readString(work.resolve("output")));
                 assertTrue(tool.execute(request("ls -la"), null).contains("output"));
-                assertEquals(
-                        work.toRealPath().toString(),
-                        tool.execute(request("printf '%s' \"$HOME\""), null));
+                // alpha.2 严格环境将 HOME 指向每次执行的私有临时目录，结束后已回收。
+                Path home = Path.of(tool.execute(request("printf '%s' \"$HOME\""), null));
+                assertFalse(home.equals(work.toRealPath()));
+                assertFalse(home.toString().equals(System.getenv("HOME")));
+                assertFalse(Files.exists(home));
                 System.out.println("live-agent Bash native: executed, hostReads=" + hostReads);
                 assertEquals(
                         "unset",

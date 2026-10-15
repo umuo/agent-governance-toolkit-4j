@@ -4,18 +4,20 @@ import io.agt.core.GovernanceException;
 import io.agt.core.HostSession;
 import io.agt.core.execution.CommandBackend;
 import io.agt.core.execution.CommandExecution;
-import io.github.sandboxdemo.api.CommandSpec;
 import io.github.sandboxdemo.api.ReadPolicy;
-import io.github.sandboxdemo.api.SandboxBackendUnavailableException;
+import io.github.sandboxdemo.api.SandboxCleanupState;
+import io.github.sandboxdemo.api.SandboxEnvironment;
+import io.github.sandboxdemo.api.SandboxException;
+import io.github.sandboxdemo.api.SandboxExecution;
 import io.github.sandboxdemo.api.SandboxPolicy;
 import io.github.sandboxdemo.api.SandboxRequest;
 import io.github.sandboxdemo.api.SandboxResult;
+import io.github.sandboxdemo.api.SandboxTerminationReason;
 import io.github.sandboxdemo.sdk.SandboxClient;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -36,6 +38,8 @@ import java.util.concurrent.TimeoutException;
 public final class SandboxCommandBackend implements CommandBackend, AutoCloseable {
     private final SandboxClient client;
     private final SandboxPolicy policy;
+    private final SandboxEnvironment environment;
+    private final ThreadPoolExecutor sdkWorkers;
     private final Semaphore capacity;
     private final ThreadPoolExecutor workers;
     private final Set<Job> jobs = ConcurrentHashMap.newKeySet();
@@ -43,9 +47,17 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
     private volatile boolean quarantined;
 
     private SandboxCommandBackend(
-            SandboxClient client, SandboxPolicy policy, boolean hostReads, int maxConcurrent) {
+            SandboxClient client,
+            SandboxPolicy policy,
+            boolean hostReads,
+            int maxConcurrent,
+            SandboxEnvironment environment) {
         this.client = Objects.requireNonNull(client);
         this.policy = Objects.requireNonNull(policy);
+        this.environment = environment;
+        if (environment != null && !environment.isStrict()) {
+            throw new GovernanceException("sandbox_environment_invalid");
+        }
         if (policy.timeout().toMillis() < 1) {
             throw new GovernanceException("sandbox_limits_invalid");
         }
@@ -60,19 +72,23 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
         }
         checkCapabilities();
         capacity = new Semaphore(maxConcurrent);
-        workers =
-                new ThreadPoolExecutor(
-                        0,
-                        maxConcurrent,
-                        30,
-                        TimeUnit.SECONDS,
-                        new SynchronousQueue<>(),
-                        task -> {
-                            var thread = new Thread(task, "agt-sandbox-worker");
-                            thread.setDaemon(true);
-                            return thread;
-                        },
-                        new ThreadPoolExecutor.AbortPolicy());
+        workers = pool(maxConcurrent, "agt-sandbox-control");
+        sdkWorkers = pool(maxConcurrent, "agt-sandbox-worker");
+    }
+
+    private static ThreadPoolExecutor pool(int maxConcurrent, String name) {
+        return new ThreadPoolExecutor(
+                0,
+                maxConcurrent,
+                30,
+                TimeUnit.SECONDS,
+                new SynchronousQueue<>(),
+                task -> {
+                    var thread = new Thread(task, name);
+                    thread.setDaemon(true);
+                    return thread;
+                },
+                new ThreadPoolExecutor.AbortPolicy());
     }
 
     /** 严格读取入口；SDK 实际 profile 不可用时拒绝，没有读取模式回退。 */
@@ -82,7 +98,7 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
 
     public static SandboxCommandBackend strict(
             SandboxClient client, SandboxPolicy policy, int maxConcurrent) {
-        return new SandboxCommandBackend(client, policy, false, maxConcurrent);
+        return new SandboxCommandBackend(client, policy, false, maxConcurrent, null);
     }
 
     /**
@@ -96,7 +112,27 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
 
     public static SandboxCommandBackend allowHostReads(
             SandboxClient client, SandboxPolicy policy, int maxConcurrent) {
-        return new SandboxCommandBackend(client, policy, true, maxConcurrent);
+        return new SandboxCommandBackend(client, policy, true, maxConcurrent, null);
+    }
+
+    /** 宿主显式注册严格工具环境；不会继承父进程 PATH。 */
+    public static SandboxCommandBackend strict(
+            SandboxClient client,
+            SandboxPolicy policy,
+            SandboxEnvironment environment,
+            int maxConcurrent) {
+        return new SandboxCommandBackend(
+                client, policy, false, maxConcurrent, Objects.requireNonNull(environment));
+    }
+
+    /** HOST 读取与严格工具环境分别由宿主选择。 */
+    public static SandboxCommandBackend allowHostReads(
+            SandboxClient client,
+            SandboxPolicy policy,
+            SandboxEnvironment environment,
+            int maxConcurrent) {
+        return new SandboxCommandBackend(
+                client, policy, true, maxConcurrent, Objects.requireNonNull(environment));
     }
 
     private void checkCapabilities() {
@@ -130,51 +166,21 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
         if (!directory.equals(execution.directory())) {
             throw new GovernanceException("sandbox_binding_mismatch");
         }
-        request(execution);
-    }
-
-    private SandboxPolicy effectivePolicy(CommandExecution execution) {
-        var builder =
-                SandboxPolicy.builder(execution.directory())
-                        .readPolicy(policy.readPolicy())
-                        .network(policy.networkPolicy())
-                        .deletion(policy.deletionPolicy())
-                        .allowPathSearch(false)
-                        .timeout(
-                                Duration.ofMillis(
-                                        Math.min(
-                                                policy.timeout().toMillis(),
-                                                execution.limits().timeoutMillis())))
-                        .maxOutputBytes(
-                                Math.min(
-                                        policy.maxOutputBytes(),
-                                        execution.limits().maxOutputBytes()));
-        if (!policy.writableRoots().contains(policy.workingDirectory())) {
-            builder.readOnlyWorkingDirectory();
+        try {
+            client.validate(request(execution));
+        } catch (SandboxException error) {
+            if (error.code() == io.github.sandboxdemo.api.SandboxErrorCode.CLEANUP_FAILED) {
+                quarantined = true;
+            }
+            throw SandboxErrors.map(error);
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw new GovernanceException("sandbox_cancelled");
         }
-        policy.readableRoots().stream()
-                .filter(
-                        root ->
-                                !root.equals(policy.workingDirectory())
-                                        && !policy.writableRoots().contains(root))
-                .distinct()
-                .forEach(builder::readableRoot);
-        policy.writableRoots().stream()
-                .filter(root -> !root.equals(policy.workingDirectory()))
-                .distinct()
-                .forEach(builder::writableRoot);
-        policy.protectedPaths().forEach(builder::protect);
-        return builder.build();
     }
 
     private SandboxRequest request(CommandExecution execution) {
-        try {
-            return SandboxRequest.of(
-                    effectivePolicy(execution),
-                    new CommandSpec(execution.executable().toString(), execution.arguments()));
-        } catch (RuntimeException error) {
-            throw new GovernanceException("sandbox_request_invalid");
-        }
+        return SandboxRequests.create(policy, execution, environment);
     }
 
     @Override
@@ -256,6 +262,10 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
         }
     }
 
+    private static boolean known(SandboxCleanupState state) {
+        return state == SandboxCleanupState.CONFIRMED || state == SandboxCleanupState.NOT_REQUIRED;
+    }
+
     private String text(
             SandboxResult result,
             CommandExecution execution,
@@ -308,6 +318,7 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
         private boolean cancelled;
         private Thread thread;
         private boolean started;
+        private volatile SandboxExecution handle;
 
         private Job(
                 SandboxRequest request,
@@ -327,6 +338,9 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
             if (started) {
                 quarantined = true;
             }
+            if (handle != null) {
+                handle.cancel();
+            }
             if (thread != null) {
                 thread.interrupt();
             }
@@ -345,10 +359,64 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
                     session.checkActive();
                     started = true;
                 }
-                output = text(client.execute(request), execution, nonZeroExit, report);
-            } catch (SandboxBackendUnavailableException error) {
-                failure = new GovernanceException("sandbox_unavailable");
+                handle = client.start(request, sdkWorkers);
+                synchronized (this) {
+                    if (cancelled || closed) {
+                        handle.cancel();
+                    }
+                }
+                var completed = handle.await();
+                var cleanup = handle.cleanup();
+                if (cleanup.streams() == SandboxCleanupState.FAILED
+                        || cleanup.temporaryFiles() == SandboxCleanupState.FAILED
+                        || cleanup.hostResources() == SandboxCleanupState.FAILED
+                        || cleanup.processes() == SandboxCleanupState.FAILED) {
+                    quarantined = true;
+                    throw new GovernanceException("sandbox_cleanup_unconfirmed");
+                }
+                if (completed.error().isPresent()) {
+                    throw completed.error().get();
+                }
+                boolean processKnown = known(cleanup.processes());
+                boolean macBestEffort =
+                        cleanup.processes() == SandboxCleanupState.UNKNOWN
+                                && client.capabilities().platform()
+                                        == io.github.sandboxdemo.api.SandboxPlatform.MACOS
+                                && client.capabilities()
+                                                .support(
+                                                        io.github.sandboxdemo.api.SandboxCapability
+                                                                .PROCESS_TREE_TERMINATION)
+                                                .guarantee()
+                                        == io.github.sandboxdemo.api.SandboxGuarantee.BEST_EFFORT;
+                if (completed.reason() != SandboxTerminationReason.EXITED
+                        || !cleanup.workerFinished()
+                        || !known(cleanup.streams())
+                        || !known(cleanup.temporaryFiles())
+                        || !known(cleanup.hostResources())
+                        || !(processKnown || macBestEffort)) {
+                    quarantined = true;
+                    throw new GovernanceException("sandbox_cleanup_unconfirmed");
+                }
+                // macOS 的进程树回收仍可能 UNKNOWN；正常退出不宣称内核级后代回收。
+                // 取消/超时仍保守隔离 backend，不因 completion 已交付自动复用。
+                output = text(completed.result().orElse(null), execution, nonZeroExit, report);
+            } catch (SandboxException error) {
+                failure = SandboxErrors.map(error);
+                // 保留超时/取消/未知执行状态的粘滞隔离，不因 SDK 已确认清理而自动解封。
+                if (Set.of(
+                                        io.github.sandboxdemo.api.SandboxErrorCode.TIMEOUT,
+                                        io.github.sandboxdemo.api.SandboxErrorCode.CANCELLED,
+                                        io.github.sandboxdemo.api.SandboxErrorCode.CLEANUP_FAILED,
+                                        io.github.sandboxdemo.api.SandboxErrorCode.UNKNOWN)
+                                .contains(error.code())
+                        || handle == null
+                        || !handle.cleanup().confirmed()) {
+                    quarantined = true;
+                }
             } catch (InterruptedException error) {
+                if (handle != null) {
+                    handle.cancel();
+                }
                 Thread.currentThread().interrupt();
                 quarantined = true;
                 failure = new GovernanceException("sandbox_cancelled");
@@ -358,6 +426,14 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
                 quarantined = true;
                 failure = new GovernanceException("sandbox_execution_failed");
             } finally {
+                if (handle != null) {
+                    // SDK 的 completion 与实际工作结束独立。占住本后端容量直到后台工作真正结束。
+                    while (!handle.cleanup().workerFinished()) {
+                        java.util.concurrent.locks.LockSupport.parkNanos(
+                                TimeUnit.MILLISECONDS.toNanos(10));
+                        Thread.interrupted();
+                    }
+                }
                 synchronized (this) {
                     // 池线程可能立即用于另一任务；晚到取消不能中断下一次执行。
                     thread = null;
@@ -379,6 +455,7 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
             closed = true;
             jobs.forEach(Job::cancel);
             workers.shutdownNow();
+            sdkWorkers.shutdownNow();
         }
     }
 }

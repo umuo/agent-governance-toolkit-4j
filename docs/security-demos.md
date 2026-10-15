@@ -2,7 +2,7 @@
 
 这组示例让你观察两个不同的边界：**AGT 决定一个动作能否进入工具；工具进入后，业务实现和隔离后端决定它能访问什么。** 默认拒绝、权限和参数校验不能自动补齐 SQL 行级授权，也不能把宿主 JVM 变成沙箱。
 
-示例沿用当前 Java 17、LangChain4j 1.20.0 与 Central sandbox SDK 0.1.0-alpha.1。新增的 H2 2.3.232 只在 examples 的运行时使用，用来执行真实内存 SQL；不接入宿主数据库，不进入 agt-core、agt-langchain4j 或 agt-sandbox 的运行时依赖。HTTP 只访问自建回环服务，文件只使用临时目录与合成 canary；无需模型 API Key。
+示例沿用当前 Java 17、LangChain4j 1.20.0 与 Central sandbox SDK 0.1.0-alpha.2。新增的 H2 2.3.232 只在 examples 的运行时使用，用来执行真实内存 SQL；不接入宿主数据库，不进入 agt-core、agt-langchain4j 或 agt-sandbox 的运行时依赖。HTTP 只访问自建回环服务，文件只使用临时目录与合成 canary；无需模型 API Key。
 
 ## 先跑，再跟代码
 
@@ -85,7 +85,7 @@ java -cp examples/target/agt-examples-0.6.0-SNAPSHOT.jar \
 | `WorkspaceWriteIsolationDemo` | HOST/DENY；先写工作区，再写工作区外 canary | 工作区内成功，工作区外 sandbox_exit_denied，canary 内容未改变 |
 | `ReadOnlyWorkspaceDemo` | readOnlyWorkingDirectory 后尝试写入 | sandbox_exit_denied，目标文件不存在；SDK 临时目录写权限另有边界 |
 | `NetworkIsolationDemo` | 固定 curl 访问回环服务，先 ALLOW 再 DENY | ALLOW 收到 OK 且服务端接入 1 次；DENY 失败且接入 0 次，避免把服务不可达误判为隔离成功 |
-| `StrictReadIsolationDemo` | DECLARED_ONLY 尝试读取未声明的外部 canary | 当前本机 alpha.1 返回 sandbox_unavailable，目标未启动；若 profile 可用，必须实际拒绝读取；无 HOST 回退 |
+| `StrictReadIsolationDemo` | DECLARED_ONLY 尝试读取未声明的外部 canary | alpha.2 在本机实际拒绝读取，返回 sandbox_exit_denied；profile 不可用时在预算提交前拒绝，无 HOST 回退 |
 | `TimeoutQuarantineDemo` | 固定 sleep 超出 100ms 期限，再用新会话尝试复用 | sandbox_timeout；再次执行 sandbox_cleanup_unconfirmed，backend 永久隔离 |
 | `InProcessJvmBoundaryDemo` | 已允许的 Java 工具在宿主 JVM 直接 Files.writeString | 宿主临时文件写入成功，证明固定命令后端不会约束同 JVM 工具代码 |
 
@@ -93,7 +93,7 @@ java -cp examples/target/agt-examples-0.6.0-SNAPSHOT.jar \
 
 六参数 FixedCommand 是有界的本机进程入口；它检查程序与参数，但不是 OS 沙箱。七参数入口注入 SandboxCommandBackend，执行才进入原生隔离后端。自动计算本机程序摘要只适合演示；生产预期摘要应来自可信的制品清单，摘要也不覆盖加载的动态库和工具链。
 
-HOST 允许读取宿主账户能读到的文件，**只验证写约束和配置的网络约束，不能称为机密读取隔离**。当前 alpha.1 的严格读取 profile 在已测 macOS 15.5 上不可用；适配器拒绝它，而不是自动降级。取消/超时后中断 SDK 线程并隔离 backend，不保证 OS 后代已全部回收。详细边界见 [沙箱接入指南](sandbox-guide.md)。
+HOST 允许读取宿主账户能读到的文件，**只验证写约束和配置的网络约束，不能称为机密读取隔离**。alpha.2 的严格读取 profile 已在 macOS 15.5 验证成功，允许固定程序运行并拒绝未声明文件。取消通过 SDK 执行句柄传递；超时或取消后仍保守隔离 backend，不保证 macOS OS 后代已全部回收。详细边界见 [沙箱接入指南](sandbox-guide.md)。
 
 ## 验收方式
 

@@ -13,10 +13,10 @@
       "adapterTests": 113,
       "httpTests": 2,
       "sseTests": 1,
-      "total": 218,
+      "total": 276,
       "failures": 0,
       "errors": 0,
-      "skipped": 0,
+      "skipped": 1,
       "syncDemoScenarios": 6,
       "asyncDemoScenarios": 7,
       "streamingDemoScenarios": 6,
@@ -25,12 +25,18 @@
       "yamlDataDemoPassed": true,
       "cleanVerifyPassed": true,
       "commandDemoScenarios": 7,
-      "sandboxContractTests": 23,
-      "sandboxNativeTests": 5,
+      "sandboxContractTests": 39,
+      "sandboxNativeTests": 9,
       "sandboxDemoScenarios": 7,
       "totalDemoScenarios": 40,
       "asi02TeachingClasses": 16,
-      "asi05TeachingClasses": 9
+      "asi05TeachingClasses": 9,
+      "governanceAndSandboxTotal": 238,
+      "liveTests": 38,
+      "liveExecuted": 37,
+      "liveSkipped": 1,
+      "executed": 275,
+      "skipReason": "LiveProviderTest: AGT_LIVE_TEST not explicitly enabled"
     },
     {
       "jdk": "21.0.4",
@@ -38,10 +44,10 @@
       "adapterTests": 113,
       "httpTests": 2,
       "sseTests": 1,
-      "total": 218,
+      "total": 276,
       "failures": 0,
       "errors": 0,
-      "skipped": 0,
+      "skipped": 1,
       "syncDemoScenarios": 6,
       "asyncDemoScenarios": 7,
       "streamingDemoScenarios": 6,
@@ -50,19 +56,26 @@
       "yamlDataDemoPassed": true,
       "cleanVerifyPassed": true,
       "commandDemoScenarios": 7,
-      "sandboxContractTests": 23,
-      "sandboxNativeTests": 5,
+      "sandboxContractTests": 39,
+      "sandboxNativeTests": 9,
       "sandboxDemoScenarios": 7,
       "totalDemoScenarios": 40,
       "asi02TeachingClasses": 16,
-      "asi05TeachingClasses": 9
+      "asi05TeachingClasses": 9,
+      "governanceAndSandboxTotal": 238,
+      "liveTests": 38,
+      "liveExecuted": 37,
+      "liveSkipped": 1,
+      "executed": 275,
+      "skipReason": "LiveProviderTest: AGT_LIVE_TEST not explicitly enabled"
     }
   ],
   "docs": {
     "strictBuildPassed": true,
     "representativeMermaidBrowserVerified": true,
     "sandboxNavigationBrowserVerified": true,
-    "securityTeachingNavigationBrowserVerified": true
+    "securityTeachingNavigationBrowserVerified": true,
+    "alpha1HistoryNavigationBrowserVerified": true
   },
   "quality": {
     "spotlessCheckPassed": true,
@@ -78,11 +91,14 @@
     "arbitraryGeneratedCodeSupported": false,
     "executableHashCoversLoadedDependencies": false,
     "descendantCleanupGuaranteed": false,
-    "strictReadProfileAvailableOnTestMachine": false,
+    "strictReadProfileAvailableOnTestMachine": true,
     "hostReadRequiresExplicitOptIn": true,
-    "sdkCleanupAcknowledgementProvided": false,
-    "uncertainCleanupPermanentlyQuarantinesBackend": true,
-    "windowsLinuxNativeVerified": false
+    "sdkCleanupAcknowledgementProvided": true,
+    "windowsLinuxNativeVerified": false,
+    "macOsProcessTreeCleanupGuaranteed": false,
+    "macOsNormalExitProcessUnknownAccepted": true,
+    "unknownStreamsTempOrHostResourcesDenyAndQuarantine": true,
+    "cancelledOrTimedOutBackendPermanentlyQuarantined": true
   },
   "performance": {
     "v06Measured": false
@@ -93,7 +109,7 @@
     "realSubprocess": true,
     "syntheticParentEnvironmentMarkerNotInherited": true
   },
-  "sandboxSdk": "io.github.umuo:agent-sandbox-sdk:0.1.0-alpha.1",
+  "sandboxSdk": "io.github.umuo:agent-sandbox-sdk:0.1.0-alpha.2",
   "jna": "5.19.1",
   "packageRefactor": {
     "date": "2026-10-15",
@@ -102,5 +118,21 @@
     "internalPackageDependencyCycleDetected": false,
     "commandRegistrationTests": 2,
     "unguardedCommandRegistrationExecutable": false
+  },
+  "publishedArtifact": {
+    "sha256": "f21bd0791b6f38641ac75062f4c6d9102d90eb9ff5dac836f1fc9866bc3e9769",
+    "publishedJavaSources": 79,
+    "differencesFromReviewedLocalSources": 0,
+    "nativeTestsUsePublishedBinary": true
+  },
+  "alpha2Integration": {
+    "preflightBeforeToolBudget": true,
+    "executionHandleCancellation": true,
+    "independentCleanupChecked": true,
+    "strictToolPathByDefault": true,
+    "outputLimitTerminates": true,
+    "outputTerminationIsAtomic": false,
+    "resourceLimitsAndIsolationPreserved": true,
+    "actualResourceHardLimitsVerified": false
   }
 }

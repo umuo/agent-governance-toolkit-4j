@@ -23,6 +23,7 @@ nav:
       - 沙箱接入需求: sandbox-requirements.md
   - 验收:
       - 当前 v0.6: sandbox-verification.md
+      - v0.6 SDK alpha.1 历史: sandbox-verification-alpha1.md
       - v0.5 固定命令: command-verification.md
       - v0.4 数据权限: data-verification.md
       - v0.3 历史: streaming-verification.md

@@ -1,11 +1,15 @@
-# v0.6 当前沙箱 SDK 接入需求
+# v0.6 沙箱 SDK alpha.2 接入要求
 
-固定引用 Maven Central `io.github.umuo:agent-sandbox-sdk:0.1.0-alpha.1`，无需等待维护中的下一版本。新增可选 agt-sandbox；core 不依赖 JNA，LangChain4j 原有 commandTool/guardCommand 接口复用固定命令后端 SPI。
+当前引用 Maven Central `io.github.umuo:agent-sandbox-sdk:0.1.0-alpha.2`，实际回归正式二进制。agt-sandbox 保持可选，core / 单独 LangChain4j 适配器不依赖 JNA；沿用固定命令后端 SPI。
 
-- 宿主绑定固定程序、摘要、argv 和不可变 SDK 策略；模型不能提供路径、网络权限、环境或原始 SandboxRequest。保留授权、改写、审批、预算和审计。
-- 默认要求 DECLARED_ONLY；HOST 仅经明确命名的宿主 opt-in 工厂注册，禁止失败后自动降级。按策略/能力/目录检查准入；SDK 原生 profile 探测仍由当前 SDK execute 完成，不将基础 status 当作完整准入证明。
-- 不提供输出回调；最终结果同时检查 timeout、exitCode、stdout/stderr 截断和聚合大小。严格 UTF-8，异常和输出原文不进入默认日志。成功文本按 stdout 后 stderr 合并，再进入原有工具后置治理。
-- 为阻塞 SDK 设置独立有限守护工作池、无等待队列；调用方按命令期限及会话状态有界等待。终止时中断 SDK 线程；直到 SDK 调用返回并结束处理才释放后端容量。退出仍不证明所有后代已回收，不能宣称 SDK-02 已修复。
-- 已进入 SDK 后的取消/超时或未知执行异常使该实例永久隔离，即使线程随后退出也不解封。后端 close 拒绝新任务并中断已有任务。无法中断的 SDK 任务继续占据有限容量；调用方可以及时收到拒绝，但不能复用可能仍执行的该后端槽位。
-- 自动化验证真实 Central 依赖、fake SDK 的故障/取消/晚到结果、真实 LangChain4j 与本机 macOS HOST 写隔离/网络拒绝及严格模式关闭。Windows/Linux 本机未运行时明确记录。
-- 当前只支持受审核固定工具，不开放任意模型代码和脚本生成。保留已知读取、资源硬限额、后代清理及平台边界，维护需求仍在 sandbox-demo 独立推进。
+- 宿主绑定程序、摘要、argv、工作区、OS 权限及工具目录；模型不能提供 SandboxRequest。授权、改写后重验、审批、预算与结果治理不绕过。
+- 默认严格读取、明确网络策略；HOST 仅经显式入口。准备阶段按有效请求执行 validate，探针失败、能力不足和非法配置在工具预算提交前拒绝，无普通进程降级。
+- 完整保留 resourceLimits / requiredIsolation；不支持的硬限制、VM 要求明确拒绝，不把 coarse FULL 视为每一项都由内核保证。
+- 默认严格环境，不继承宿主 PATH；HOME 使用 SDK 私有临时目录，持久输出放工作区。宿主可通过四参数工厂显式供应严格工具目录，不能传 legacy 环境静默放宽。
+- 输出共享及每流额度取更小值；TERMINATE-on-limit、无回调、严格 UTF-8、结果与截断复查。原文和调试异常不进默认审计。
+- 有限控制池与 SDK 池、零队列；通过执行句柄协作取消，容量保持到实际 workerFinished。调用方等待、执行完成和资源回收互相独立。
+- 管道/临时资源/宿主准备资源未确认或失败时拒绝。macOS 进程树 BEST_EFFORT 正常退出的 UNKNOWN 明确披露；取消、超时、清理失败继续保守隔离，不宣称完整后代回收。
+- 使用正式 Central 制品、真实 LangChain4j、本机合成文件与回环服务验证；测试对比 SDK-01 至 SDK-07 的具体措施与平台边界。不把 fake runner、跳过、只改版本号当作原生保证。
+- 核心固定工具接口不扩展为任意生成代码执行器；live 示例显式脚本入口保持示例边界。SDK 并不提供 JVM 沙箱或本机尚未实现的资源硬限额。
+
+历史 alpha.1 的接入结论保留在 [旧验收](sandbox-verification-alpha1.md)。当前使用方式见 [指南](sandbox-guide.md)。

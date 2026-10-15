@@ -91,7 +91,7 @@ API key、模型名称、工作区必须显式配置。本地兼容服务如果�
 ### Bash 与宿主终端的差异
 
 - 当前目录是本轮工作区；`pwd` 显示工作区路径。网页会话使用各自的工作区，不能假设等于仓库目录。
-- SDK 将 `HOME` 和 `USERPROFILE` 指向工作区。因此 `~/.ssh/id_rsa.pub` 是工作区下的 `.ssh/id_rsa.pub`，不是宿主用户的公钥路径。开启 HOST 不会恢复宿主 `HOME`。
+- SDK alpha.2 的严格环境将 `HOME` 和 `USERPROFILE` 指向每次执行的私有临时目录，执行后回收；`~` 也不指向宿主用户目录。当前工作目录仍是配置的工作区，持久文件应使用工作区相对路径。开启 HOST 不会恢复宿主 `HOME`。
 - Bash 以 `/bin/bash --noprofile --norc -c` 执行，不加载宿主登录 shell 的 profile、rc、alias 或 shell function。
 - 子进程使用 SDK 清理后的环境，只保留 PATH 等允许的变量；不自动继承 `LLM_API_KEY` 等私密配置。命令是否能通过名称找到仍受 PATH 影响；可用 `/bin/ls` 这类明确路径排查。
 - HOST 不会安装缺失的软件，不保证每个二进制或依赖的系统服务都能在沙箱中运行，也不绕过操作系统权限。原生后端不可用时拒绝执行，不回退到无沙箱进程。
@@ -110,7 +110,7 @@ printf 'sandbox-ok\n' > sandbox-check.txt
 /bin/cat sandbox-check.txt
 ```
 
-本机 macOS 验收已在 HOST 模式下通过真实 `BashTool` 验证 `ls -la`、工作区写入/读回、HOME 指向工作区和越界写入拒绝；这不代表所有宿主环境均有相同兼容性。若 `ls -la` 失败，不能仅凭失败就判定 HOST 不支持 ls：需要对照该轮具体错误代码和服务端日志。`ls` 失败但 `/bin/ls` 成功时，优先检查 PATH。
+本机 macOS 验收已在 HOST 模式下通过真实 `BashTool` 验证 `ls -la`、工作区写入/读回、HOME 指向并回收 SDK 私有临时目录和越界写入拒绝；这不代表所有宿主环境均有相同兼容性。若 `ls -la` 失败，不能仅凭失败就判定 HOST 不支持 ls：需要对照该轮具体错误代码和服务端日志。`ls` 失败但 `/bin/ls` 成功时，优先检查 PATH。
 
 | 原因码 | 含义与排查 |
 | --- | --- |

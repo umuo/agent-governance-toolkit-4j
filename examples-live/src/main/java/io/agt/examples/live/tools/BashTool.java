@@ -46,14 +46,26 @@ public final class BashTool implements AutoCloseable {
                         .build();
         backend =
                 hostReads
-                        ? SandboxCommandBackend.allowHostReads(SandboxClient.create(), policy)
-                        : SandboxCommandBackend.strict(SandboxClient.create(), policy);
+                        ? SandboxCommandBackend.allowHostReads(
+                                SandboxClient.create(),
+                                policy,
+                                io.github.sandboxdemo.api.SandboxEnvironment.strict(
+                                        Path.of("/bin").toRealPath(),
+                                        Path.of("/usr/bin").toRealPath()),
+                                2)
+                        : SandboxCommandBackend.strict(
+                                SandboxClient.create(),
+                                policy,
+                                io.github.sandboxdemo.api.SandboxEnvironment.strict(
+                                        Path.of("/bin").toRealPath(),
+                                        Path.of("/usr/bin").toRealPath()),
+                                2);
     }
 
     @Tool(
             name = "Bash",
             value =
-                    "Execute a Bash script in workspace, network denied, 10s/32768-byte limits; requires human approval. Starts in workspace; HOME is workspace, not the host user home. File read scope depends on host configuration; writes remain sandbox restricted.")
+                    "Execute a Bash script in workspace, network denied, 10s/32768-byte limits; requires human approval. Starts in workspace; HOME is an SDK-private temporary directory, not the host user home. File read scope depends on host configuration; writes remain sandbox restricted.")
     public String executeForAgent(String command) {
         return backend.executeReport(execution(command), control.currentSession());
     }

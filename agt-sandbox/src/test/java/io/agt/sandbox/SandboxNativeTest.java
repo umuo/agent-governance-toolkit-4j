@@ -287,4 +287,127 @@ class SandboxNativeTest {
             }
         }
     }
+
+    @Test
+    void strictReadRunsAllowedCommandAndRejectsUndeclaredCanary() throws Exception {
+        Path work = Files.createDirectory(temporary.toRealPath().resolve("strict"));
+        try (var backend =
+                SandboxCommandBackend.strict(
+                        SandboxClient.create(),
+                        SandboxPolicy.builder(work)
+                                .readPolicy(ReadPolicy.DECLARED_ONLY)
+                                .network(NetworkPolicy.DENY)
+                                .build())) {
+            activeCommand =
+                    command(
+                            work,
+                            "/usr/bin/printf",
+                            List.of(CommandArgument.literal("ok")),
+                            backend);
+            try (var control = control(activeCommand);
+                    var session = control.openSession(IDENTITY)) {
+                assertEquals("ok", execute(control, "{}"));
+                assertEquals(1, session.budgetSnapshot().toolCalls());
+            }
+            Path outside = temporary.toRealPath().resolve("undeclared");
+            Files.writeString(outside, "synthetic-canary");
+            activeCommand =
+                    command(
+                            work,
+                            "/bin/cat",
+                            List.of(CommandArgument.literal(outside.toString())),
+                            backend);
+            try (var control = control(activeCommand);
+                    var session = control.openSession(IDENTITY)) {
+                assertEquals(
+                        "sandbox_exit_denied",
+                        assertThrows(GovernanceException.class, () -> execute(control, "{}"))
+                                .code());
+            }
+        }
+    }
+
+    @Test
+    void terminateOnOutputLimitStopsContinuousOutputBeforeTimeout() throws Exception {
+        Path work = temporary.toRealPath();
+        try (var backend =
+                SandboxCommandBackend.allowHostReads(
+                        SandboxClient.create(),
+                        SandboxPolicy.builder(work)
+                                .readPolicy(ReadPolicy.HOST)
+                                .network(NetworkPolicy.DENY)
+                                .build())) {
+            // 单进程持续输出，避免用 shell 子进程终止顺序冒充原子副作用阻断。
+            Path executable = Path.of("/usr/bin/yes").toRealPath();
+            activeCommand =
+                    new FixedCommand(
+                            "report",
+                            executable,
+                            HexFormat.of()
+                                    .formatHex(
+                                            MessageDigest.getInstance("SHA-256")
+                                                    .digest(Files.readAllBytes(executable))),
+                            work,
+                            List.of(),
+                            new CommandLimits(5000, 16, 1),
+                            backend);
+            long start = System.nanoTime();
+            try (var control = control(activeCommand);
+                    var session = control.openSession(IDENTITY)) {
+                assertEquals(
+                        "sandbox_output_limit",
+                        assertThrows(GovernanceException.class, () -> execute(control, "{}"))
+                                .code());
+            }
+            assertTrue(
+                    System.nanoTime() - start < java.util.concurrent.TimeUnit.SECONDS.toNanos(3));
+        }
+    }
+
+    @Test
+    void strictEnvironmentUsesOnlyTrustedExecutableDirectory() throws Exception {
+        Path work = temporary.toRealPath();
+        try (var backend =
+                SandboxCommandBackend.allowHostReads(
+                        SandboxClient.create(),
+                        SandboxPolicy.builder(work)
+                                .readPolicy(ReadPolicy.HOST)
+                                .network(NetworkPolicy.DENY)
+                                .build())) {
+            activeCommand = command(work, "/usr/bin/env", List.of(), backend);
+            try (var control = control(activeCommand);
+                    var session = control.openSession(IDENTITY)) {
+                String environment = execute(control, "{}");
+                assertTrue(environment.lines().anyMatch(line -> line.equals("PATH=/usr/bin")));
+                assertFalse(environment.contains("JAVA_TOOL_OPTIONS="));
+                assertFalse(environment.contains("DYLD_"));
+                assertFalse(environment.contains("LD_PRELOAD="));
+            }
+        }
+    }
+
+    @Test
+    void strictReadCanRunExplicitlyDeclaredJdkRuntime() throws Exception {
+        Path work = temporary.toRealPath();
+        Path javaHome = Path.of(System.getProperty("java.home")).toRealPath();
+        try (var backend =
+                SandboxCommandBackend.strict(
+                        SandboxClient.create(),
+                        SandboxPolicy.builder(work)
+                                .readableRoot(javaHome)
+                                .readPolicy(ReadPolicy.DECLARED_ONLY)
+                                .network(NetworkPolicy.DENY)
+                                .build())) {
+            activeCommand =
+                    command(
+                            work,
+                            javaHome.resolve("bin/java").toString(),
+                            List.of(CommandArgument.literal("-version")),
+                            backend);
+            try (var control = control(activeCommand);
+                    var session = control.openSession(IDENTITY)) {
+                assertTrue(execute(control, "{}").contains("version"));
+            }
+        }
+    }
 }

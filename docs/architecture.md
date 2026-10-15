@@ -121,4 +121,4 @@ v0.5 的 agt-core.execution 提供不可变 argv 模板、枚举参数、程序�
 
 ## 可选 OS 沙箱后端
 
-v0.6 增加 agt-sandbox，固定依赖 Central SDK 0.1.0-alpha.1。core.execution 的 CommandBackend/CommandExecution 承接准备和执行，FixedCommand 的原有本机入口保持兼容；七参数入口显式绑定非空后端。LangChain4j 无需增加第二条工具治理路径，仍经 commandTool/guardCommand 授权、改写、审批和计数。SDK 阻塞调用使用独立有限工作池、零队列、最终输出严格检查；取消/超时的后端永久隔离，不声称获得 SDK 尚未提供的回收确认。详见 [沙箱接入指南](sandbox-guide.md)。
+v0.6 增加 agt-sandbox，固定依赖 Central SDK 0.1.0-alpha.2。core.execution 的 CommandBackend/CommandExecution 承接准备和执行，FixedCommand 的原有本机入口保持兼容；七参数入口显式绑定非空后端。LangChain4j 无需增加第二条工具治理路径，仍经 commandTool/guardCommand 授权、改写、审批和计数。SDK 策略预检在准备阶段执行，实际执行使用独立有界池与执行句柄，保留资源限额/隔离机制要求，输出超限提前终止。SDK completion 与 cleanup 分别检查；管道/临时资源未知或失败时拒绝，macOS 进程树仅有 BEST_EFFORT 保证，正常退出允许其明确的进程 UNKNOWN，取消/超时后仍保守隔离。详见 [沙箱接入指南](sandbox-guide.md)。

@@ -25,6 +25,11 @@ record ToolFailure(String code, String message, String hint) {
                     Map.entry("sandbox_unavailable", "当前环境无法启动所配置的原生沙箱；严格读取模式下命令未执行，也不会自动开放宿主读取。"),
                     Map.entry("sandbox_policy_unsupported", "当前原生沙箱不支持所配置的隔离策略。"),
                     Map.entry("sandbox_timeout", "Bash 执行超时。"),
+                    Map.entry("sandbox_cancelled", "Bash 执行已取消。"),
+                    Map.entry("sandbox_cleanup_unconfirmed", "沙箱回收状态无法确认，该后端已停止接受新任务。"),
+                    Map.entry("sandbox_start_failed", "沙箱目标启动失败。"),
+                    Map.entry("sandbox_output_failed", "沙箱输出捕获失败，结果未交付。"),
+                    Map.entry("sandbox_request_invalid", "沙箱请求不符合宿主策略。"),
                     Map.entry("sandbox_output_limit", "Bash 输出超过限制。"),
                     Map.entry("tool_failed", "工具执行失败；未识别的底层异常已记录在服务端日志。"),
                     Map.entry("session_failed", "本轮会话已因先前错误终止，后续工具未执行。"));
