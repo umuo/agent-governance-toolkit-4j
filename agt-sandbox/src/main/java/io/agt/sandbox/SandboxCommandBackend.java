@@ -179,10 +179,32 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
 
     @Override
     public String execute(CommandExecution execution, HostSession session) {
+        return execute(execution, session, ignored -> {});
+    }
+
+    /** 单次执行的退出码诊断；只在非零退出时回调，不发布未检查的 stdout/stderr。 */
+    public String execute(
+            CommandExecution execution,
+            HostSession session,
+            java.util.function.IntConsumer nonZeroExit) {
+        return execute(execution, session, nonZeroExit, false);
+    }
+
+    /** 返回结构化退出码与 stdout/stderr；调用方必须通过工具结果治理后才能交付这些内容。 */
+    public String executeReport(CommandExecution execution, HostSession session) {
+        return execute(execution, session, ignored -> {}, true);
+    }
+
+    private String execute(
+            CommandExecution execution,
+            HostSession session,
+            java.util.function.IntConsumer nonZeroExit,
+            boolean report) {
+        Objects.requireNonNull(nonZeroExit);
         prepare(execution);
         session.checkActive();
         var request = request(execution);
-        var job = new Job(request, execution, session);
+        var job = new Job(request, execution, session, nonZeroExit, report);
         long timeout = Math.min(policy.timeout().toMillis(), execution.limits().timeoutMillis());
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeout);
         synchronized (this) {
@@ -234,7 +256,11 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
         }
     }
 
-    private String text(SandboxResult result, CommandExecution execution) {
+    private String text(
+            SandboxResult result,
+            CommandExecution execution,
+            java.util.function.IntConsumer nonZeroExit,
+            boolean report) {
         if (result == null) {
             throw new GovernanceException("sandbox_invalid_result");
         }
@@ -245,7 +271,8 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
         if (result.stdoutTruncated() || result.stderrTruncated()) {
             throw new GovernanceException("sandbox_output_limit");
         }
-        if (result.exitCode() != 0) {
+        if (result.exitCode() != 0 && !report) {
+            nonZeroExit.accept(result.exitCode());
             throw new GovernanceException("sandbox_exit_denied");
         }
         byte[] stdout = result.stdout();
@@ -260,6 +287,11 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
                     StandardCharsets.UTF_8.newDecoder().decode(ByteBuffer.wrap(stdout)).toString();
             String second =
                     StandardCharsets.UTF_8.newDecoder().decode(ByteBuffer.wrap(stderr)).toString();
+            if (report) {
+                return io.agt.core.JsonValues.write(
+                        java.util.Map.of(
+                                "exitCode", result.exitCode(), "stdout", first, "stderr", second));
+            }
             return first + (separator == 0 ? "" : "\n") + second;
         } catch (CharacterCodingException error) {
             throw new GovernanceException("sandbox_output_encoding_invalid");
@@ -267,6 +299,8 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
     }
 
     private final class Job implements Runnable {
+        private final boolean report;
+        private final java.util.function.IntConsumer nonZeroExit;
         private final SandboxRequest request;
         private final CommandExecution execution;
         private final HostSession session;
@@ -275,10 +309,17 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
         private Thread thread;
         private boolean started;
 
-        private Job(SandboxRequest request, CommandExecution execution, HostSession session) {
+        private Job(
+                SandboxRequest request,
+                CommandExecution execution,
+                HostSession session,
+                java.util.function.IntConsumer nonZeroExit,
+                boolean report) {
+            this.report = report;
             this.request = request;
             this.execution = execution;
             this.session = session;
+            this.nonZeroExit = nonZeroExit;
         }
 
         synchronized void cancel() {
@@ -304,7 +345,7 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
                     session.checkActive();
                     started = true;
                 }
-                output = text(client.execute(request), execution);
+                output = text(client.execute(request), execution, nonZeroExit, report);
             } catch (SandboxBackendUnavailableException error) {
                 failure = new GovernanceException("sandbox_unavailable");
             } catch (InterruptedException error) {

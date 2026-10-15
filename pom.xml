@@ -12,6 +12,7 @@
     <module>agt-langchain4j</module>
     <module>agt-sandbox</module>
     <module>examples</module>
+    <module>examples-live</module>
   </modules>
   <properties>
     <maven.compiler.release>17</maven.compiler.release>

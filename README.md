@@ -22,6 +22,10 @@ java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar allowed examples/polic
 
 ## 最小接入
 
+Spring Boot + Next.js 网页对话、流式预览、工具卡片和审批见 [Web Agent 实验台](docs/web-agent-guide.md)。
+
+真实 LLM 多轮工具 Agent 见独立模块 [examples-live](examples-live/README.md) 和 [完整指南](docs/live-agent-guide.md)：支持 `readFile`、`writeFile`、`editFile`、`searchFile`、`listFiles`、可选沙箱 `Bash`，接入 AGT 权限、审批、预算及审计。
+
 将 SDK 安装到本机默认 Maven 仓库（供其他工程引用；制品尚未发布到 Maven Central）：
 
 ```bash

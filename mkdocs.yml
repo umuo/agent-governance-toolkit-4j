@@ -10,6 +10,8 @@ nav:
       - 固定命令与 ASI05: command-guide.md
       - 当前沙箱 SDK: sandbox-guide.md
       - ASI02 与 ASI05 场景教学: security-demos.md
+      - 真实 LLM 通用 Agent: live-agent-guide.md
+      - Web Agent 实验台: web-agent-guide.md
   - 需求与架构:
       - 架构与扩展: architecture.md
       - 关键类与调用机制: key-classes.md

@@ -1,0 +1,166 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import { Markdown } from '@/components/markdown';
+import { type Tool } from '@/components/tool-card';
+import { ExecutionProcess, type Approval } from '@/components/execution-process';
+import { appendModelDelta, appendReference, modelContent, type Activity } from '@/lib/process';
+import { ArrowUp, Circle, Code2, FileText, FlaskConical, MessageSquare, Plus, ShieldCheck, Square, Terminal } from 'lucide-react';
+import { consumeEvents, type AgentEvent } from '@/lib/stream';
+
+type Turn = { id: string; question: string; text: string; activity: Activity[]; finalCall?: number; tools: Tool[]; approvals: Approval[]; status: 'running' | 'done' | 'error' | 'cancelled'; error?: string; budget?: Record<string, unknown> };
+type Scenario = { id: string; name: string; status: string; profile: string; prompt: string };
+type Config = { configured: boolean; model: string; bashEnabled: boolean; bashHostReads: boolean };
+const value = (input: unknown) => typeof input === 'string' ? input : '';
+const profiles = [{ id: 'agent', label: '通用 Agent' }, { id: 'read-only', label: '只读权限' }, { id: 'approval', label: '写入审批' }, { id: 'budget', label: '有限预算' }];
+
+export default function Page() {
+  const [config, setConfig] = useState<Config | null>(null);
+  const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const [profile, setProfile] = useState('agent');
+  const [mode, setMode] = useState('preview');
+  const [turns, setTurns] = useState<Turn[]>([]);
+  const [prompt, setPrompt] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [events, setEvents] = useState<{ type: string; data: Record<string, unknown>; time: string; id: string }[]>([]);
+  const [now, setNow] = useState(Date.now());
+  const abort = useRef<AbortController | null>(null);
+  const end = useRef<HTMLDivElement>(null);
+  const followOutput = useRef(true);
+  const composer = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    Promise.all([fetch('/api/agent/config', { signal: controller.signal }), fetch('/api/agent/scenarios', { signal: controller.signal })]).then(async ([a, b]) => {
+      if (!a.ok || !b.ok) throw new Error('无法连接 Agent 服务，请先启动 Spring Boot。');
+      setConfig(await a.json()); setScenarios(await b.json());
+    }).catch(error => { if (!controller.signal.aborted) setNotice(error.message); });
+    return () => { controller.abort(); abort.current?.abort(); };
+  }, []);
+  useEffect(() => { if (followOutput.current) end.current?.scrollIntoView({ behavior: 'instant', block: 'end' }); }, [turns]);
+  useEffect(() => { if (!busy) return; const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, [busy]);
+
+  function update(id: string, transform: (turn: Turn) => Turn) { setTurns(previous => previous.map(turn => turn.id === id ? transform(turn) : turn)); }
+  function receive(id: string, event: AgentEvent) {
+    const d = event.data;
+    setEvents(previous => {
+      const last = previous.at(-1);
+      if (last && ['text_delta', 'reasoning_delta', 'tool_delta'].includes(event.type)
+          && last.type === event.type && last.data.call === d.call && last.data.key === d.key) {
+        const field = event.type === 'tool_delta' ? 'arguments' : 'text';
+        const combined = value(last.data[field]) + value(d[field]);
+        return [...previous.slice(0, -1), { ...last, data: { ...d, [field]: combined.slice(-6000),
+          fragments: Number(last.data.fragments || 1) + 1, truncated: combined.length > 6000 || last.data.truncated === true } }];
+      }
+      return [...previous.slice(-149), { ...event, id: crypto.randomUUID(), time: new Date().toLocaleTimeString('zh-CN', { hour12: false }) }];
+    });
+    update(id, turn => {
+      const next = { ...turn, tools: turn.tools.map(tool => ({ ...tool })), approvals: turn.approvals.map(approval => ({ ...approval })) };
+      switch (event.type) {
+        case 'text_delta': case 'reasoning_delta': next.activity = appendModelDelta(next.activity, event.type === 'text_delta' ? 'content' : 'reasoning', Number(d.call), value(d.text)); break;
+        case 'model_complete': if (d.hasTools === false) next.finalCall = Number(d.call); break;
+        case 'answer_start': next.text = ''; break;
+        case 'answer_delta': next.text += value(d.text); break;
+        case 'tool_delta': {
+          const key = value(d.key);
+          let tool = next.tools.find(item => item.key === key);
+          if (!tool) { tool = { key, id: value(d.id), name: value(d.name), arguments: '', state: 'receiving' }; next.tools.push(tool); }
+          tool.id = value(d.id) || tool.id; tool.name = value(d.name) || tool.name; tool.arguments += value(d.arguments);
+          next.activity = appendReference(next.activity, 'tool', tool.key);
+          break;
+        }
+        case 'tool_start': {
+          let tool = next.tools.find(item => item.id === d.id);
+          if (!tool) { tool = { key: value(d.id), id: value(d.id), name: value(d.name), arguments: '', state: 'running' }; next.tools.push(tool); }
+          tool.state = 'running'; tool.name = value(d.name); tool.arguments = value(d.arguments); next.activity = appendReference(next.activity, 'tool', tool.key); break;
+        }
+        case 'tool_result': case 'tool_error': {
+          let tool = next.tools.find(item => item.id === d.id);
+          if (!tool && event.type === 'tool_error') { tool = { key: value(d.id), id: value(d.id), name: value(d.name), arguments: value(d.arguments), state: 'error' }; next.tools.push(tool); }
+          if (tool) { next.activity = appendReference(next.activity, 'tool', tool.key); tool.state = event.type === 'tool_error' ? 'error' : 'done'; tool.result = event.type === 'tool_error' ? [value(d.code), value(d.message), value(d.hint)].filter(Boolean).join('\n') : value(d.result); tool.recoverable = d.recoverable === true; tool.stdout = typeof d.stdout === 'string' ? d.stdout : undefined; tool.stderr = typeof d.stderr === 'string' ? d.stderr : undefined; tool.exitCode = typeof d.exitCode === 'number' ? d.exitCode : undefined; tool.arguments = value(d.arguments) || tool.arguments; tool.duration = typeof d.durationMs === 'number' ? d.durationMs : undefined; }
+          break;
+        }
+        case 'approval_required': next.approvals.push(d as unknown as Approval); next.activity = appendReference(next.activity, 'approval', value(d.id)); break;
+        case 'budget': next.budget = d; break;
+        case 'error': next.status = 'error'; next.tools.forEach(tool => { if (tool.state === 'receiving' || tool.state === 'running') tool.state = 'error'; }); next.error = `${value(d.code)} · ${value(d.message)}`;
+          if (d.code === 'sandbox_unavailable') next.error += '\n审批已通过，但当前环境无法启动所配置的原生沙箱。批准动作不会改变沙箱隔离规则；严格模式不会自动回退为 HOST 读取。';
+          if (d.code === 'sandbox_policy_unsupported') next.error += '\n当前原生后端不支持所配置的隔离策略。'; next.approvals.forEach(item => { if (!item.decision) item.decision = '运行已结束'; }); break;
+        case 'done': next.status = 'done'; next.tools.forEach(tool => { if (tool.state === 'receiving') tool.state = 'error'; }); break;
+      }
+      return next;
+    });
+  }
+  async function send() {
+    if (busy || !config?.configured || !prompt.trim()) return;
+    const text = prompt.trim(), id = crypto.randomUUID();
+    followOutput.current = true;
+    setPrompt(''); setBusy(true); setNotice('');
+    setTurns(previous => [...previous, { id, question: text, text: '', activity: [], tools: [], approvals: [], status: 'running' }]);
+    const controller = new AbortController(); abort.current = controller;
+    let terminal = false;
+    try {
+      const response = await fetch('/api/agent/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, scenario: profile, mode }), signal: controller.signal });
+      if (!response.ok) throw new Error(`接口返回 ${response.status}：${await response.text()}`);
+      if (!response.body) throw new Error('服务未返回事件流');
+      await consumeEvents(response.body, event => { if (event.type === 'done' || event.type === 'error') terminal = true; receive(id, event); });
+      if (!terminal) throw new Error('事件流意外中断，请重试。');
+    } catch (error) {
+      update(id, turn => ({ ...turn, tools: turn.tools.map(tool => ({ ...tool, state: tool.state === 'receiving' || tool.state === 'running' ? 'error' : tool.state })), status: controller.signal.aborted ? 'cancelled' : 'error', error: controller.signal.aborted ? '已停止。已完成的工具副作用不会回滚。' : error instanceof Error ? error.message : '连接失败' }));
+    } finally { setBusy(false); abort.current = null; composer.current?.focus(); }
+  }
+  async function stop() {
+    try { await api('/cancel', 'POST'); } catch (error) { setNotice(String(error)); } finally { abort.current?.abort(); }
+  }
+  async function api(path: string, method: string, body?: unknown) {
+    const response = await fetch(`/api/agent${path}`, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+    if (!response.ok) throw new Error(`操作失败 (${response.status})：${await response.text()}`);
+  }
+  async function reset(newProfile?: string) {
+    if (busy) return;
+    try { await api('/session', 'DELETE'); setTurns([]); setEvents([]); setNotice(''); if (newProfile) setProfile(newProfile); }
+    catch (error) { setNotice(error instanceof Error ? error.message : '清空失败'); }
+  }
+  async function decide(turnId: string, approval: Approval, approved: boolean) {
+    try { await api(`/approvals/${approval.id}`, 'POST', { approved }); update(turnId, turn => ({ ...turn, approvals: turn.approvals.map(item => item.id === approval.id ? { ...item, decision: approved ? '已批准' : '已拒绝' } : item) })); }
+    catch (error) { setNotice(error instanceof Error ? error.message : '审批失败'); }
+  }
+  const latest = turns.at(-1);
+  const toolCount = turns.reduce((count, turn) => count + turn.tools.filter(tool => tool.state === 'done').length, 0);
+
+  return <div className="shell">
+    <aside className="sidebar">
+      <a className="brand" href="/"><span className="brand-icon"><ShieldCheck size={24} /></span><div>AGT<span>AGENT GOVERNANCE TOOLKIT</span></div></a>
+      <button className="new-chat" onClick={() => reset()} disabled={busy}><Plus size={17} /> 新对话 <span>↗</span></button>
+      <div className="nav-label">WORKSPACE</div>
+      <div className="nav-active"><MessageSquare size={17} /> Agent 对话 <span className="small-dot" /></div>
+      <div className="scenario-heading"><span className="nav-label">OWASP AGENT TOP 10</span><FlaskConical size={14} /></div>
+      <div className="scenario-list">{scenarios.map(scenario => <button key={scenario.id} className={`scenario ${scenario.status !== 'ready' ? 'planned' : ''}`} disabled={busy || scenario.status !== 'ready'} title={scenario.name} onClick={async () => { await reset(scenario.profile); setPrompt(scenario.prompt); composer.current?.focus(); }}><span className="scenario-id">{scenario.id}</span><span className="scenario-name">{scenario.name}</span><span className="scenario-badge">{scenario.status === 'ready' ? '可运行' : scenario.status === 'requires-bash' ? '需配置' : '待扩展'}</span></button>)}</div>
+      <div className="sidebar-foot"><ShieldCheck size={17} /><div>Governance by design<small>真实模型 · 受控工具 · 动作审计</small></div></div>
+    </aside>
+
+    <main className="main">
+      <header className="header"><div><span className="eyebrow">AGENT LAB <span>/</span> PLAYGROUND</span><h1>让每一次行动，都有迹可循。</h1></div><div className="connection"><span className={config?.configured ? 'online' : 'offline'} />{config?.configured ? '模型已配置' : '等待配置'}</div></header>
+      <div className="controls"><div className="control-group"><ShieldCheck size={15} /><label htmlFor="profile">治理策略</label><select id="profile" value={profile} disabled={busy} onChange={event => reset(event.target.value)}>{profiles.map(item => <option value={item.id} key={item.id}>{item.label}</option>)}</select></div><div className="control-group"><label htmlFor="mode">输出模式</label><select id="mode" value={mode} disabled={busy} onChange={event => setMode(event.target.value)}><option value="strict">严格检查后交付</option><option value="preview">完整过程实时渲染</option></select></div><span className="model-name">{config?.model || '尚未配置模型'}</span></div>
+      {mode === 'preview' && <div className="preview-notice">实时展示每轮 response content、接口实际返回的 reasoning 和工具调用。过程输出尚未通过完整检查，结束或失败后仍保留供查看；工具执行始终受授权控制。</div>}
+      {notice && <div className="notice" role="alert">{notice}</div>}
+      {config && !config.configured && <div className="notice" role="alert">请填写 examples-live/.env.local 的 LLM_API_KEY、LLM_MODEL 和 AGT_WORKSPACE，然后重启后端。</div>}
+      <div className="conversation" aria-live="polite" aria-busy={busy} onScroll={event => { const node = event.currentTarget; followOutput.current = node.scrollHeight - node.scrollTop - node.clientHeight < 100; }}>
+        {turns.length === 0 && <section className="welcome"><div className="welcome-symbol"><Code2 size={29} /><span><ShieldCheck size={17} /></span></div><span className="eyebrow">YOUR AGENT. YOUR RULES.</span><h2>从一个任务开始。</h2><p>与真实 LLM 协作，让 Agent 读写文件、执行工具。<br />在同一条时间线上，观察每一步治理决策。</p><div className="suggestions">{[{ icon: FileText, title: '创建并验证文件', prompt: '创建 hello.md，写一段介绍 Agent 治理的 Markdown，然后读取文件验证。' }, { icon: ShieldCheck, title: '试试人工审批', prompt: '创建 approved.txt，内容是 approved，然后读取确认。', profile: 'approval' }, { icon: Terminal, title: '探索工作区', prompt: '列出当前工作区中的所有文件，并说明你可以使用哪些工具。' }].map(item => <button key={item.title} onClick={async () => { if (item.profile) await reset(item.profile); setPrompt(item.prompt); composer.current?.focus(); }}><item.icon size={19} /><span>{item.title}</span><span>↗</span></button>)}</div><div className="capabilities"><span>readFile</span><span>writeFile</span><span>editFile</span><span>searchFile</span><span>Bash {config?.bashEnabled ? '· 已启用' : '· 未启用'}</span></div></section>}
+        {turns.map(turn => <article className="turn" key={turn.id}>
+          <div className="user-message"><span className="avatar user-avatar">U</span><div><span className="message-label">你</span><p>{turn.question}</p></div></div>
+          <div className="agent-message"><span className="avatar agent-avatar"><ShieldCheck size={19} /></span><div className="agent-content"><div className="message-heading"><span className="message-label">AGT Agent</span><span className={`status ${turn.status}`}>{({ running: '运行中', done: '已完成', error: '已中止', cancelled: '已停止' })[turn.status]}</span></div>
+            <ExecutionProcess activity={turn.activity} tools={turn.tools} approvals={turn.approvals} now={now} running={turn.status === 'running'} checkedText={turn.status === 'done' ? turn.text : ''} finalCall={turn.finalCall} onDecide={(approval, approved) => void decide(turn.id, approval, approved)} />
+            {turn.text && (!modelContent(turn.activity, turn.finalCall) || turn.status === 'done' && modelContent(turn.activity, turn.finalCall) !== turn.text) && <div className="checked-answer"><span className="process-label">最终答复 · 已检查</span><Markdown text={turn.text} /></div>}
+            {turn.status === 'running' && !turn.text && <div className="thinking"><span /><span /><span /><small>{turn.approvals.some(approval => !approval.decision) ? '等待审批' : turn.tools.some(tool => tool.state === 'running') ? '工具执行中' : 'Agent 正在继续执行'}</small></div>}
+            {turn.error && <div className="message-error" role="alert">{turn.error}</div>}
+            {turn.budget && <div className="budget"><span>{String(turn.budget.modelCalls)} 次模型调用</span><span>{String(turn.budget.toolCalls)} 次工具调用</span><span>{turn.budget.tokens == null ? '未知' : String(turn.budget.tokens)} tokens</span></div>}
+          </div></div>
+        </article>)}<div ref={end} />
+      </div>
+      <footer className="composer-wrap"><form className="composer" onSubmit={event => { event.preventDefault(); void send(); }}><textarea ref={composer} aria-label="给 Agent 的任务" placeholder="给 Agent 一个任务…" value={prompt} onChange={event => setPrompt(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} rows={2} disabled={busy} maxLength={16000} /><div className="composer-bottom"><span><ShieldCheck size={13} /> 工具执行始终经过 AGT</span>{busy ? <button type="button" className="send stop" onClick={stop} aria-label="停止运行"><Square size={15} fill="currentColor" /> 停止</button> : <button type="submit" className="send" disabled={!prompt.trim() || !config?.configured} aria-label="发送消息"><ArrowUp size={19} /></button>}</div></form><div className="composer-hint"><span>Enter 发送 · Shift + Enter 换行</span><span>本地实验环境 · 副作用不会自动回滚</span></div></footer>
+    </main>
+
+    <aside className="inspector"><div className="inspector-title"><span><Circle size={13} /> 运行观察</span><span className="live-label">LIVE</span></div><div className="metrics"><div><span>已完成回合</span><strong>{turns.filter(turn => turn.status === 'done').length.toString().padStart(2, '0')}</strong></div><div><span>已执行工具</span><strong>{toolCount.toString().padStart(2, '0')}</strong></div></div><div className="inspector-section"><span className="micro">RUNTIME BOUNDARIES</span><dl><div><dt>工作区</dt><dd>浏览器会话独立</dd></div><div><dt>权限来源</dt><dd>可信宿主</dd></div><div><dt>Bash</dt><dd>{config?.bashEnabled ? config.bashHostReads ? 'HOST 读取（显式开启）' : 'workspace + 系统运行时只读' : '未启用'}</dd></div><div><dt>输出</dt><dd>{mode === 'strict' ? '检查通过后交付' : '未检查实时预览'}</dd></div></dl></div><div className="timeline-header"><span className="micro">EVENT TIMELINE</span><span>{events.length}</span></div><div className="event-timeline">{events.length === 0 ? <div className="timeline-empty"><span className="timeline-line" /><p>还没有运行事件</p><small>发起任务后，在这里查看<br />模型、工具与策略决策。</small></div> : events.map(event => <details key={event.id} className={`event-row ${event.type === 'error' || event.data.verdict === 'ERROR' || (event.data.verdict === 'DENY' && event.data.approval !== 'approved') ? 'denied' : ''}`}><summary><span className="event-dot" /><div><span>{event.type === 'governance' ? value(event.data.point) : event.type}</span><small>{event.type === 'governance' ? value(event.data.reason) : event.time}</small></div></summary><pre>{JSON.stringify(event.data, null, 2)}</pre></details>)}</div><div className="inspector-foot"><ShieldCheck size={16} /><span>每个动作，均有审计记录。<br /><small>{latest?.status === 'running' ? '正在接收运行事件…' : '等待下一次运行'}</small></span></div></aside>
+  </div>;
+}
