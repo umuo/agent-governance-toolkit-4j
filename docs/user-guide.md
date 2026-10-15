@@ -10,7 +10,177 @@ java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar allowed examples/polic
 
 可选场景为 `allowed`、`denied`、`transform`、`approval`、`approval-denied`、`budget`。默认策略采用 Java Builder，第二个参数可切换为本地 YAML。`transform` 演示预期结果为 `masked:modified`；使用外部 YAML 时策略以文件为准，该演示仍要求其改写验收条件满足。
 
-## 受控 AI Services
+## LangChain4j Agent 调用与受控治理对比
+
+在 LangChain4j 中构建 Agent 的核心手段是 **`AiServices`** 与 **`@Tool`** 注解。开发者无需手动编写复杂的提示词和函数调用解析循环，只需声明业务接口和本地方法，LangChain4j 运行时会自动驱动模型完成「思考-行动-观察」（ReAct）闭环。
+
+然而，原生的 Agent 缺乏安全边界（例如模型被提示词注入导致越权调用高危工具、工具陷入死循环耗尽 Token 等）。本节通过对比**原生 LangChain4j 标准写法**与 **AGT 受控治理写法**，说明如何在生产环境中规范且安全地调用 Agent。
+
+### 1. 原生 LangChain4j 标准调用（入门）
+
+#### 步骤 1：定义 Agent 接口
+接口用于声明业务交互协议，LangChain4j 运行时将为其动态生成实现：
+
+```java
+public interface WeatherAgent {
+    String chat(String userMessage);
+}
+```
+
+#### 步骤 2：定义工具（@Tool）
+编写普通的 Java 类，在对外开放的方法上标注 `@Tool` 注解及清晰的功能描述：
+
+```java
+import dev.langchain4j.agent.tool.Tool;
+
+public class WeatherTools {
+    @Tool("根据城市名称查询当前天气情况")
+    public String getWeather(String city) {
+        if ("北京".equals(city)) {
+            return "北京今天晴，气温 22°C";
+        }
+        return city + "的天气信息暂未收录";
+    }
+}
+```
+
+#### 步骤 3：配置 ChatModel
+声明模型客户端（例如 OpenAI 兼容模型）：
+
+```java
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
+
+ChatModel model = OpenAiChatModel.builder()
+        .baseUrl("https://api.openai.com/v1")
+        .apiKey(System.getenv("OPENAI_API_KEY"))
+        .modelName("gpt-4o")
+        .temperature(0.0)
+        .build();
+```
+
+#### 步骤 4：组装并执行调用
+通过 `AiServices.builder` 组装并触发调用：
+
+```java
+import dev.langchain4j.memory.chat.MessageWindowChatMemory;
+import dev.langchain4j.service.AiServices;
+
+public class QuickStart {
+    public static void main(String[] args) {
+        WeatherAgent agent = AiServices.builder(WeatherAgent.class)
+                .chatModel(model)
+                .tools(new WeatherTools())
+                .chatMemory(MessageWindowChatMemory.withMaxMessages(10))
+                .build();
+
+        String reply = agent.chat("请问北京今天天气怎么样？");
+        System.out.println(reply);
+    }
+}
+```
+
+---
+
+### 2. AGT 受控治理调用（生产级强化）
+
+直接运行原生 Agent 存在显著隐患：
+- **无鉴权与权限隔离**：任何输入均可驱动模型尝试调用任何挂载的工具。
+- **无预算与频次限制**：模型陷入工具死循环时会持续消耗费用，直到发生底层 HTTP 超时。
+- **高危动作缺少审批**：写入、删除或命令执行等副作用动作直接生效。
+- **缺少调用审计追溯**：无法获知究竟是哪个用户在什么会话中触发了哪些工具副作用。
+
+通过引入 `agt-langchain4j` 的 `LangChain4jGovernance`，可以在保持原生 `AiServices` 开发体验的同时，为 Agent 注入全生命周期的可信治理：
+
+```java
+import io.agt.core.AgentControl;
+import io.agt.core.BudgetLimits;
+import io.agt.core.GovernanceException;
+import io.agt.core.TrustedContext;
+import io.agt.core.audit.JsonlAuditSink;
+import io.agt.core.policy.StructuredPolicy;
+import io.agt.core.policy.ToolRule;
+import io.agt.langchain4j.LangChain4jGovernance;
+import java.nio.file.Path;
+import java.util.Set;
+
+public class GovernedAgentQuickStart {
+    public static void main(String[] args) {
+        // 1. 声明治理策略：指定工具权限要求与会话预算上限
+        StructuredPolicy policy = StructuredPolicy.builder("weather-service-v1")
+                .tool("getWeather", new ToolRule(Set.of("weather.read"), null, false))
+                .budget(new BudgetLimits(5, 5, 60_000)) // 最多 5 次模型调用、5 次工具调用、60 秒超时
+                .build();
+
+        // 2. 初始化治理控制器并绑定结构化审计
+        try (var audit = new JsonlAuditSink(Path.of("run-audit.jsonl"));
+             var control = AgentControl.builder(policy).audit(audit).build()) {
+
+            // 3. 使用 LangChain4jGovernance 构建受控 Agent
+            WeatherAgent agent = new LangChain4jGovernance(control)
+                    .aiServices(WeatherAgent.class)
+                    .chatModel(model)
+                    .tools(new WeatherTools())
+                    .build();
+
+            // 4. 在宿主已认证的可信会话（TrustedContext）中安全调用
+            // 权限必须来自宿主系统认证结果，而非来自不可信的模型输入
+            var identity = new TrustedContext("weather-agent", "tenant-100", "user-01", Set.of("weather.read"));
+            try (var session = control.openSession(identity)) {
+                String reply = agent.chat("北京今天天气如何？");
+                System.out.println(reply);
+            } catch (GovernanceException e) {
+                // 当权限不足、预算超限或审批被拒绝时，AGT 抛出确定性的治理异常
+                System.err.println("调用被安全拦截，原因码: " + e.code());
+            }
+        }
+    }
+}
+```
+
+---
+
+### 3. 原生 Agent vs. AGT 受控 Agent 对比
+
+| 治理维度 | 原生 LangChain4j (`AiServices`) | AGT 受控治理 (`LangChain4jGovernance`) |
+| :--- | :--- | :--- |
+| **工具权限管理** | 无权限概念，挂载即全量可用 | 基于 `TrustedContext` 和策略严格检查权限，无权限立即拦截 |
+| **参数深度校验** | 依赖模型遵循 JSON Schema，可能发生非法越界 | 支持字段级正则、长度、枚举及 `equalsContext` 跨租户校验 |
+| **防死循环与预算** | 仅依赖外部 HTTP 超时，容易消耗大量 Token | 严格控制模型调用次数、工具执行次数及毫秒级会话截止期 |
+| **高危动作审批** | 不支持原生人机协同审批闭环 | 声明式 `approvalRequired=true`，异步挂起等待真实终端/人工审批 |
+| **内容脱敏与改写** | 需硬编码拦截器或手工处理 | 声明式内容改写规则（前置改写、后置脱敏），支持阻断敏感子串 |
+| **执行可追溯性** | 仅有日志打印或模型 listener（存在泄露风险） | 全链路结构化 JSONL 审计，记录输入、决策、工具参数与副作用 |
+
+#### 交互与治理执行时序
+
+```mermaid
+sequenceDiagram
+    participant User as 用户
+    participant AGT as AGT 治理会话 (Session)
+    participant Model as 大语言模型 (LLM)
+    participant Tool as 本地工具 (@Tool)
+    participant Audit as 结构化审计 (AuditSink)
+
+    User->>AGT: agent.chat("北京天气如何？")
+    AGT->>Audit: 记录 input 事件
+    AGT->>Model: 检查预算后发起调用 (pre_model_call)
+    Model-->>AGT: 模型决定调用 getWeather(city="北京")
+    AGT->>AGT: 校验天气读取权限与城市参数 (pre_tool_call)
+    alt 策略允许 (Allow)
+        AGT->>Tool: 执行本地 getWeather("北京")
+        Tool-->>AGT: 返回 "北京今天晴，气温 22°C"
+        AGT->>Audit: 记录工具执行事件
+        AGT->>Model: 回传执行结果继续推理
+        Model-->>AGT: 模型输出最终自然语言文本
+        AGT->>Audit: 记录 output 事件并扣减预算
+        AGT-->>User: 交付安全可信结果
+    else 权限缺失 / 预算耗尽 / 审批拒绝 (Deny)
+        AGT->>Audit: 记录拦截事件及失败原因
+        AGT-->>User: 抛出 GovernanceException (阻断执行)
+    end
+```
+
+## 受控 AI Services 详细接入
 
 先加载策略和必需审计 sink，再构建治理运行时：
 
