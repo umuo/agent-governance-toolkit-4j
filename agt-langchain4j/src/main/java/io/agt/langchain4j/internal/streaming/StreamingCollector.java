@@ -27,14 +27,19 @@ import java.util.concurrent.CompletableFuture;
  */
 final class StreamingCollector implements StreamingChatResponseHandler {
     private final StreamingLimits limits;
+    private final HostSession session;
+    private final StreamingChatResponseHandler preview;
     private final CompletableFuture<ChatResponse> result = new CompletableFuture<>();
     private volatile StreamingHandle handle;
     private long characters;
     private long events;
     private boolean terminal;
 
-    private StreamingCollector(StreamingLimits limits) {
+    private StreamingCollector(
+            HostSession session, StreamingLimits limits, StreamingChatResponseHandler preview) {
         this.limits = limits;
+        this.session = session;
+        this.preview = preview;
         result.whenComplete(
                 (value, error) -> {
                     if (error != null) {
@@ -49,7 +54,17 @@ final class StreamingCollector implements StreamingChatResponseHandler {
             StreamingLimits limits,
             ChatRequest request,
             ChatRequestOptions options) {
-        var collector = new StreamingCollector(limits);
+        return collect(session, model, limits, request, options, null);
+    }
+
+    static CompletableFuture<ChatResponse> collect(
+            HostSession session,
+            StreamingChatModel model,
+            StreamingLimits limits,
+            ChatRequest request,
+            ChatRequestOptions options,
+            StreamingChatResponseHandler preview) {
+        var collector = new StreamingCollector(session, limits, preview);
         // provider 的入口可能尚未返回；取得 handle 后也必须能立即响应会话终止。
         session.watchTermination(collector.result);
         try {
@@ -108,31 +123,41 @@ final class StreamingCollector implements StreamingChatResponseHandler {
 
     @Override
     public void onPartialResponse(String text) {
-        charge(text);
+        if (charge(text)) {
+            preview(handler -> handler.onPartialResponse(text));
+        }
     }
 
     @Override
     public void onPartialResponse(PartialResponse value, PartialResponseContext context) {
         capture(context.streamingHandle());
-        charge(value.text());
+        if (charge(value.text())) {
+            preview(handler -> handler.onPartialResponse(value, context));
+        }
     }
 
     @Override
     public void onPartialThinking(PartialThinking value) {
-        charge(value.text());
+        if (charge(value.text())) {
+            preview(handler -> handler.onPartialThinking(value));
+        }
     }
 
     @Override
     public void onPartialThinking(PartialThinking value, PartialThinkingContext context) {
         capture(context.streamingHandle());
-        charge(value.text());
+        if (charge(value.text())) {
+            preview(handler -> handler.onPartialThinking(value, context));
+        }
     }
 
     @Override
     public void onPartialToolCall(PartialToolCall value) {
-        charge(
+        if (charge(
                 (long) length(value.id()) + length(value.name()) + length(value.partialArguments()),
-                false);
+                false)) {
+            preview(handler -> handler.onPartialToolCall(value));
+        }
     }
 
     @Override
@@ -151,7 +176,31 @@ final class StreamingCollector implements StreamingChatResponseHandler {
 
     @Override
     public void onUnmappedRawEvent(Object value) {
-        charge(null);
+        if (preview == null) {
+            charge(null);
+            return;
+        }
+        try {
+            if (charge(
+                    JsonValues.write(
+                            io.agt.langchain4j.internal.service.TypedValues.project(value)))) {
+                preview(handler -> handler.onUnmappedRawEvent(value));
+            }
+        } catch (RuntimeException error) {
+            onError(error);
+        }
+    }
+
+    private void preview(java.util.function.Consumer<StreamingChatResponseHandler> emit) {
+        if (preview == null || result.isDone()) {
+            return;
+        }
+        try (var scope = session.bind()) {
+            session.checkActive();
+            emit.accept(preview);
+        } catch (Throwable error) {
+            onError(error);
+        }
     }
 
     @Override

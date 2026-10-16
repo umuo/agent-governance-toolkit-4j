@@ -15,6 +15,8 @@ import dev.langchain4j.service.tool.BeforeToolExecution;
 import dev.langchain4j.service.tool.ToolExecution;
 import io.agt.core.GovernanceException;
 import io.agt.core.HostSession;
+import io.agt.langchain4j.StreamDelivery;
+import io.agt.langchain4j.internal.service.CallbackViews;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -24,9 +26,9 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
- * 单次启动的严格缓冲 TokenStream。
+ * 单次启动的受控 TokenStream。
  *
- * <p>输出检查通过后重放一个有效文本块；通过 completion 等待交付，通过 cancel 取消。
+ * <p>严格模式检查后交付文本，实时模式交付预览；完整结果经检查，通过 completion 等待、cancel 取消。
  */
 final class BufferedStream implements BufferedStreamControl {
     private final HostSession session;
@@ -39,10 +41,28 @@ final class BufferedStream implements BufferedStreamControl {
     private BiConsumer<PartialResponse, PartialResponseContext> partialWithContext;
     private Consumer<ChatResponse> complete;
     private Consumer<Throwable> error;
+    private final StreamDelivery delivery;
+    private final boolean extended;
+    private boolean previewed;
+    private Consumer<PartialThinking> thinking;
+    private BiConsumer<PartialThinking, PartialThinkingContext> thinkingContext;
+    private Consumer<PartialToolCall> tool;
+    private BiConsumer<PartialToolCall, PartialToolCallContext> toolContext;
+    private Consumer<List<Content>> retrieved;
+    private Consumer<ChatResponse> intermediate;
+    private Consumer<BeforeToolExecution> before;
+    private Consumer<ToolExecution> after;
+    private Consumer<Object> raw;
 
-    BufferedStream(HostSession session, Supplier<CompletableFuture<ChatResponse>> invoke) {
+    BufferedStream(
+            HostSession session,
+            Supplier<CompletableFuture<ChatResponse>> invoke,
+            StreamDelivery delivery,
+            boolean extended) {
         this.session = session;
         this.invoke = invoke;
+        this.delivery = delivery;
+        this.extended = extended;
         session.watchTermination(completion);
         completion.whenComplete(
                 (value, failure) -> {
@@ -117,8 +137,16 @@ final class BufferedStream implements BufferedStreamControl {
     }
 
     @Override
-    public TokenStream ignoreErrors() {
-        throw new GovernanceException("stream_ignore_errors_unsupported");
+    public synchronized TokenStream ignoreErrors() {
+        if (!extended) {
+            throw new GovernanceException("stream_ignore_errors_unsupported");
+        }
+        configurable();
+        if (error != null) {
+            throw new GovernanceException("duplicate_stream_callback");
+        }
+        error = ignored -> {};
+        return this;
     }
 
     @Override
@@ -152,26 +180,11 @@ final class BufferedStream implements BufferedStreamControl {
                 }
                 session.checkActive();
                 AiMessage message = response.aiMessage();
-                if (message.text() != null) {
-                    if (partial != null) {
-                        partial.accept(message.text());
-                    }
-                    if (partialWithContext != null) {
-                        partialWithContext.accept(
-                                new PartialResponse(message.text()),
-                                new PartialResponseContext(
-                                        new StreamingHandle() {
-                                            @Override
-                                            public void cancel() {
-                                                BufferedStream.this.cancel();
-                                            }
-
-                                            @Override
-                                            public boolean isCancelled() {
-                                                return completion.isCancelled();
-                                            }
-                                        }));
-                    }
+                if (message.text() != null && (delivery == StreamDelivery.STRICT || !previewed)) {
+                    emitText(message.text());
+                }
+                if (extended && delivery == StreamDelivery.STRICT && message.thinking() != null) {
+                    emitThinking(new PartialThinking(message.thinking()));
                 }
                 session.checkActive();
                 if (complete != null) {
@@ -204,54 +217,233 @@ final class BufferedStream implements BufferedStreamControl {
         }
     }
 
+    private StreamingHandle handle() {
+        return new StreamingHandle() {
+            public void cancel() {
+                BufferedStream.this.cancel();
+            }
+
+            public boolean isCancelled() {
+                return completion.isCancelled();
+            }
+        };
+    }
+
+    private void emitText(String text) {
+        if (partial != null) {
+            partial.accept(text);
+        }
+        if (partialWithContext != null) {
+            partialWithContext.accept(
+                    new PartialResponse(text), new PartialResponseContext(handle()));
+        }
+    }
+
+    private void emitThinking(PartialThinking value) {
+        if (thinking != null) {
+            thinking.accept(value);
+        }
+        if (thinkingContext != null) {
+            thinkingContext.accept(value, new PartialThinkingContext(handle()));
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public synchronized void accept(String kind, Object value) {
+        if (!extended || !started || completion.isDone()) {
+            return;
+        }
+        try (var scope = session.bind()) {
+            session.checkActive();
+            if (kind.equals("text")
+                    || kind.equals("thinking")
+                    || kind.equals("tool")
+                    || kind.equals("raw")) {
+                if (delivery != StreamDelivery.REALTIME) {
+                    return;
+                }
+                switch (kind) {
+                    case "text" -> {
+                        previewed = true;
+                        emitText((String) value);
+                    }
+                    case "thinking" -> emitThinking((PartialThinking) value);
+                    case "tool" -> {
+                        if (tool != null) {
+                            tool.accept((PartialToolCall) value);
+                        }
+                        if (toolContext != null) {
+                            toolContext.accept(
+                                    (PartialToolCall) value, new PartialToolCallContext(handle()));
+                        }
+                    }
+                    case "raw" -> {
+                        if (raw != null) {
+                            raw.accept(value);
+                        }
+                    }
+                    default -> {}
+                }
+                return;
+            }
+            switch (kind) {
+                case "retrieved" -> {
+                    if (retrieved != null) {
+                        retrieved.accept(
+                                (List<Content>) CallbackViews.checked(session, value, List.class));
+                    }
+                }
+                case "intermediate" -> {
+                    if (intermediate != null) {
+                        intermediate.accept(
+                                (ChatResponse)
+                                        CallbackViews.checked(session, value, ChatResponse.class));
+                    }
+                }
+                case "before" -> {
+                    if (before != null) {
+                        before.accept(
+                                (BeforeToolExecution)
+                                        CallbackViews.checked(
+                                                session, value, BeforeToolExecution.class));
+                    }
+                }
+                case "after" -> {
+                    if (after != null) {
+                        after.accept(
+                                (ToolExecution)
+                                        CallbackViews.checked(session, value, ToolExecution.class));
+                    }
+                }
+                default -> throw new GovernanceException("stream_event_unsupported");
+            }
+        } catch (Throwable error) {
+            var safe = GovernedStreamingChatModel.safe(error);
+            session.refuse(safe.code());
+            completion.completeExceptionally(safe);
+        }
+    }
+
     private TokenStream unsupported() {
         throw new GovernanceException("stream_side_channel_unsupported");
     }
 
     @Override
-    public TokenStream onPartialThinking(Consumer<PartialThinking> handler) {
-        return unsupported();
+    public synchronized TokenStream onPartialThinking(Consumer<PartialThinking> handler) {
+        if (!extended) {
+            return unsupported();
+        }
+        configurable();
+        if (thinking != null) {
+            throw new GovernanceException("duplicate_stream_callback");
+        }
+        thinking = Objects.requireNonNull(handler);
+        return this;
     }
 
     @Override
-    public TokenStream onPartialThinkingWithContext(
+    public synchronized TokenStream onPartialThinkingWithContext(
             BiConsumer<PartialThinking, PartialThinkingContext> handler) {
-        return unsupported();
+        if (!extended) {
+            return unsupported();
+        }
+        configurable();
+        if (thinkingContext != null) {
+            throw new GovernanceException("duplicate_stream_callback");
+        }
+        thinkingContext = Objects.requireNonNull(handler);
+        return this;
     }
 
     @Override
-    public TokenStream onPartialToolCall(Consumer<PartialToolCall> handler) {
-        return unsupported();
+    public synchronized TokenStream onPartialToolCall(Consumer<PartialToolCall> handler) {
+        if (!extended) {
+            return unsupported();
+        }
+        configurable();
+        if (tool != null) {
+            throw new GovernanceException("duplicate_stream_callback");
+        }
+        tool = Objects.requireNonNull(handler);
+        return this;
     }
 
     @Override
-    public TokenStream onPartialToolCallWithContext(
+    public synchronized TokenStream onPartialToolCallWithContext(
             BiConsumer<PartialToolCall, PartialToolCallContext> handler) {
-        return unsupported();
+        if (!extended) {
+            return unsupported();
+        }
+        configurable();
+        if (toolContext != null) {
+            throw new GovernanceException("duplicate_stream_callback");
+        }
+        toolContext = Objects.requireNonNull(handler);
+        return this;
     }
 
     @Override
-    public TokenStream onRetrieved(Consumer<List<Content>> handler) {
-        return unsupported();
+    public synchronized TokenStream onRetrieved(Consumer<List<Content>> handler) {
+        if (!extended) {
+            return unsupported();
+        }
+        configurable();
+        if (retrieved != null) {
+            throw new GovernanceException("duplicate_stream_callback");
+        }
+        retrieved = Objects.requireNonNull(handler);
+        return this;
     }
 
     @Override
-    public TokenStream onIntermediateResponse(Consumer<ChatResponse> handler) {
-        return unsupported();
+    public synchronized TokenStream onIntermediateResponse(Consumer<ChatResponse> handler) {
+        if (!extended) {
+            return unsupported();
+        }
+        configurable();
+        if (intermediate != null) {
+            throw new GovernanceException("duplicate_stream_callback");
+        }
+        intermediate = Objects.requireNonNull(handler);
+        return this;
     }
 
     @Override
-    public TokenStream beforeToolExecution(Consumer<BeforeToolExecution> handler) {
-        return unsupported();
+    public synchronized TokenStream beforeToolExecution(Consumer<BeforeToolExecution> handler) {
+        if (!extended) {
+            return unsupported();
+        }
+        configurable();
+        if (before != null) {
+            throw new GovernanceException("duplicate_stream_callback");
+        }
+        before = Objects.requireNonNull(handler);
+        return this;
     }
 
     @Override
-    public TokenStream onUnmappedRawEvent(Consumer<Object> handler) {
-        return unsupported();
+    public synchronized TokenStream onUnmappedRawEvent(Consumer<Object> handler) {
+        if (!extended) {
+            return unsupported();
+        }
+        configurable();
+        if (raw != null) {
+            throw new GovernanceException("duplicate_stream_callback");
+        }
+        raw = Objects.requireNonNull(handler);
+        return this;
     }
 
     @Override
-    public TokenStream onToolExecuted(Consumer<ToolExecution> handler) {
-        return unsupported();
+    public synchronized TokenStream onToolExecuted(Consumer<ToolExecution> handler) {
+        if (!extended) {
+            return unsupported();
+        }
+        configurable();
+        if (after != null) {
+            throw new GovernanceException("duplicate_stream_callback");
+        }
+        after = Objects.requireNonNull(handler);
+        return this;
     }
 }

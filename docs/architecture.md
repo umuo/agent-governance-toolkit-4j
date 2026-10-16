@@ -45,6 +45,16 @@
 
 源码阅读顺序：根包门面 → 对应职责的 Adapters 工厂 → 同包 Governed 实现 → HostSession。流式用户操作从旧 BufferedTokenStream 门面跟进内部 BufferedStream；RAG 和 Memory 共用消息投影，但各自保留独立数据访问职责。
 
+## 原生配置接入
+
+新增 `aiServices(Class, Consumer<AiServices<T>>)` 和自动会话 `create` 入口。
+`NativeServices` 的内部配置类继承原生配置类，使用专用 `AiServiceContext` 包装记忆初始化，
+在 `ToolService` 注册点包装静态工具和动态 Provider，最终交给原生 Builder 构建。
+原 Builder 和新入口共用既有 INPUT/OUTPUT 代理与全部模型/工具执行内核。
+不注册全局工厂；`ManagedSession` 为无现有会话的调用创建 detached 会话，
+同步、future 和缓冲流分别在对应完成边界关闭，并保持取消传播。
+详见 [原生接入指南](native-integration-guide.md) 与 [需求](native-integration-requirements.md)。
+
 ## 依赖与调用链
 
 ```mermaid
@@ -107,7 +117,7 @@ AuditSink.write 同步确认；异常导致 runtime 级粘滞故障，所有会�
 
 ## 扩展路线
 
-框架适配器只依赖核心契约，因此后续 Spring AI 或其他框架可增加独立制品。v0.2 已实现异步/并发扩展，见 [异步使用指南](async-guide.md)。v0.3 通过流式 collector 复用同一异步状态机，抑制早期工具事件，完整响应通过检查后才进入顺序工具循环；最终交付 promise 关联会话终止。详见 [严格缓冲流式指南](streaming-guide.md)。Reactive 背压与实时 token 交付不在当前支持矩阵。
+框架适配器只依赖核心契约，因此后续 Spring AI 或其他框架可增加独立制品。v0.2 已实现异步/并发扩展，见 [异步使用指南](async-guide.md)。v0.3 通过流式 collector 复用同一异步状态机，抑制早期工具事件，完整响应通过检查后才进入顺序工具循环；最终交付 promise 关联会话终止。详见 [严格缓冲流式指南](streaming-guide.md)。原生配置入口现已扩展实时 token 与 Reactive 背压交付，完整响应与工具仍经治理，见 [原生接入指南](native-integration-guide.md)。
 
 [RAG/Memory、供应链与 OWASP 边界](verification.md) 属于后续工作。Rust FFI、OPA、Cedar 若未来接入，需独立规范与真实兼容测试；JCA 支持某算法不能证明协议互通，排序 JSON 键也不能证明与 ACS 哈希一致。
 

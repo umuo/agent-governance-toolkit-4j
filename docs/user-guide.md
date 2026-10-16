@@ -182,6 +182,12 @@ sequenceDiagram
 
 ## 受控 AI Services 详细接入
 
+新原生入口同时支持结构化值、多模态、实时/严格流与 Reactive，详见 [兼容性扩展](native-compatibility-requirements.md)。以下旧 Builder 示例保留原有类型限制。
+
+推荐已有 LangChain4j 应用先阅读 [原生配置与自动会话](native-integration-guide.md)：
+`create(Class, identitySupplier, builder -> ...)` 复用原生配置并管理顶层会话，
+`aiServices(Class, builder -> ...)` 复用配置而保留显式会话。以下旧 Builder 接入仍然兼容。
+
 先加载策略和必需审计 sink，再构建治理运行时：
 
 ```java

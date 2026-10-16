@@ -26,12 +26,16 @@ import io.agt.core.AgentControl;
 import io.agt.core.GovernanceException;
 import io.agt.core.HostSession;
 import io.agt.core.InterventionPoint;
+import io.agt.core.TrustedContext;
 import io.agt.core.data.DataResource;
 import io.agt.core.execution.FixedCommand;
 import io.agt.langchain4j.internal.memory.MemoryAdapters;
 import io.agt.langchain4j.internal.message.TextProjection;
 import io.agt.langchain4j.internal.model.ModelAdapters;
 import io.agt.langchain4j.internal.rag.RetrievalAdapters;
+import io.agt.langchain4j.internal.service.NativeServices;
+import io.agt.langchain4j.internal.service.PublisherTypes;
+import io.agt.langchain4j.internal.service.TypedValues;
 import io.agt.langchain4j.internal.streaming.StreamingAdapters;
 import io.agt.langchain4j.internal.tool.ToolAdapters;
 import java.lang.reflect.InvocationTargetException;
@@ -53,7 +57,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * LangChain4j 治理门面与构建器。
@@ -62,9 +68,16 @@ import java.util.function.Function;
  */
 public final class LangChain4jGovernance {
     private final AgentControl control;
+    private final StreamDelivery delivery;
 
     public LangChain4jGovernance(AgentControl control) {
+        this(control, StreamDelivery.REALTIME);
+    }
+
+    /** 新原生入口显式选择交付契约；旧 Builder/guardStreamingModel 保留严格语义。 */
+    public LangChain4jGovernance(AgentControl control, StreamDelivery delivery) {
         this.control = Objects.requireNonNull(control);
+        this.delivery = Objects.requireNonNull(delivery);
         requireVersion(ChatModel.class, "langchain4j-core");
         requireVersion(AiServices.class, "langchain4j");
     }
@@ -125,6 +138,104 @@ public final class LangChain4jGovernance {
 
     public <T> Builder<T> aiServices(Class<T> type) {
         return new Builder<>(this, type);
+    }
+
+    /**
+     * 使用原生 Builder 配置受治理的服务，调用方显式管理会话。
+     *
+     * @param type AI Service 接口
+     * @param configure 原生配置回调；由本方法完成最终构建
+     * @param <T> 服务类型
+     * @return 受治理服务
+     */
+    public <T> T aiServices(Class<T> type, Consumer<AiServices<T>> configure) {
+        Objects.requireNonNull(type);
+        Objects.requireNonNull(configure);
+        control.requirePoints(InterventionPoint.lifecyclePoints());
+        if (!type.isInterface()) {
+            throw new GovernanceException("ai_service_interface_required");
+        }
+        for (Method method : type.getMethods()) {
+            TypedValues.validate(method.getGenericReturnType());
+            for (Type parameter : method.getGenericParameterTypes()) {
+                TypedValues.validate(parameter);
+            }
+        }
+        return new Builder<>(this, type)
+                .wrap(NativeServices.build(control, type, configure, delivery), true);
+    }
+
+    /**
+     * 使用原生配置并自动管理顶层调用会话。
+     *
+     * <p>身份必须来自宿主认证上下文。已有会话时复用其身份和预算，不重复解析身份或关闭宿主会话。
+     *
+     * @param type AI Service 接口
+     * @param identity 每次顶层调用取得可信身份
+     * @param configure 原生配置回调
+     * @param <T> 服务类型
+     * @return 可直接调用的受治理服务
+     */
+    public <T> T create(
+            Class<T> type, Supplier<TrustedContext> identity, Consumer<AiServices<T>> configure) {
+        Objects.requireNonNull(identity);
+        T service = aiServices(type, configure);
+        return type.cast(
+                Proxy.newProxyInstance(
+                        type.getClassLoader(),
+                        new Class<?>[] {type},
+                        (self, method, args) -> {
+                            if (method.getDeclaringClass() == Object.class) {
+                                return switch (method.getName()) {
+                                    case "toString" ->
+                                            "ManagedGovernedAiService["
+                                                    + type.getSimpleName()
+                                                    + "]";
+                                    case "hashCode" -> System.identityHashCode(self);
+                                    case "equals" -> self == args[0];
+                                    default -> throw new GovernanceException("method_unsupported");
+                                };
+                            }
+                            try {
+                                return ManagedSession.invoke(
+                                        control,
+                                        identity,
+                                        () -> {
+                                            try {
+                                                method.trySetAccessible();
+                                                return method.invoke(service, args);
+                                            } catch (InvocationTargetException e) {
+                                                if (e.getCause()
+                                                        instanceof RuntimeException runtime) {
+                                                    throw runtime;
+                                                }
+                                                throw new GovernanceException("ai_service_failed");
+                                            } catch (IllegalAccessException e) {
+                                                throw new GovernanceException("ai_service_failed");
+                                            }
+                                        });
+                            } catch (RuntimeException error) {
+                                if (PublisherTypes.isPublisher(method.getGenericReturnType())) {
+                                    java.util.concurrent.Flow.Publisher<Object> failed =
+                                            subscriber -> {
+                                                subscriber.onSubscribe(
+                                                        new java.util.concurrent.Flow
+                                                                .Subscription() {
+                                                            public void request(long n) {}
+
+                                                            public void cancel() {}
+                                                        });
+                                                subscriber.onError(error);
+                                            };
+                                    return PublisherTypes.adapt(
+                                            method.getGenericReturnType(), failed);
+                                }
+                                if (Builder.isAsync(method)) {
+                                    return CompletableFuture.failedFuture(error);
+                                }
+                                throw error;
+                            }
+                        }));
     }
 
     /**
@@ -330,12 +441,7 @@ public final class LangChain4jGovernance {
 
         public T build() {
             governance.control.requirePoints(InterventionPoint.lifecyclePoints());
-            if (!type.isInterface()) {
-                throw new GovernanceException("ai_service_interface_required");
-            }
-            for (Method method : type.getMethods()) {
-                validateMethod(method);
-            }
+            validateType(type);
             boolean streaming = Arrays.stream(type.getMethods()).anyMatch(Builder::isStreaming);
             boolean nonStreaming = Arrays.stream(type.getMethods()).anyMatch(m -> !isStreaming(m));
             if (streaming
@@ -409,7 +515,14 @@ public final class LangChain4jGovernance {
                             }
                         });
             }
-            T delegate = builder.build();
+            return wrap(builder.build());
+        }
+
+        private T wrap(T delegate) {
+            return wrap(delegate, false);
+        }
+
+        private T wrap(T delegate, boolean typed) {
             Object proxy =
                     Proxy.newProxyInstance(
                             type.getClassLoader(),
@@ -432,7 +545,11 @@ public final class LangChain4jGovernance {
                                     Map<String, Object> input = new LinkedHashMap<>();
                                     for (int i = 0; i < original.length; i++) {
                                         if (!trustedParameter(method.getParameters()[i])) {
-                                            input.put(Integer.toString(i), original[i]);
+                                            input.put(
+                                                    Integer.toString(i),
+                                                    typed
+                                                            ? TypedValues.project(original[i])
+                                                            : original[i]);
                                         }
                                     }
                                     Function<Object, Object> invoke =
@@ -444,10 +561,21 @@ public final class LangChain4jGovernance {
                                                     if (!trustedParameter(
                                                             method.getParameters()[i])) {
                                                         actual[i] =
-                                                                TextProjection.requiredString(
-                                                                        values.get(
-                                                                                Integer.toString(
-                                                                                        i)));
+                                                                typed
+                                                                        ? TypedValues.restore(
+                                                                                original[i],
+                                                                                values.get(
+                                                                                        Integer
+                                                                                                .toString(
+                                                                                                        i)),
+                                                                                method.getGenericParameterTypes()[
+                                                                                        i])
+                                                                        : TextProjection
+                                                                                .requiredString(
+                                                                                        values.get(
+                                                                                                Integer
+                                                                                                        .toString(
+                                                                                                                i)));
                                                     }
                                                 }
                                                 try {
@@ -467,15 +595,50 @@ public final class LangChain4jGovernance {
                                             };
                                     Function<Object, Object> project =
                                             result ->
-                                                    result instanceof AiMessage m
-                                                            ? TextProjection.message(m)
-                                                            : result;
+                                                    typed
+                                                            ? TypedValues.project(result)
+                                                            : result instanceof AiMessage m
+                                                                    ? TextProjection.message(m)
+                                                                    : result;
                                     BiFunction<Object, Object, Object> replace =
                                             (result, effective) ->
-                                                    result instanceof AiMessage m
-                                                            ? TextProjection.replace(m, effective)
-                                                            : TextProjection.nullableString(
-                                                                    effective);
+                                                    typed
+                                                            ? TypedValues.restore(
+                                                                    result,
+                                                                    effective,
+                                                                    TypedValues.resultType(
+                                                                            method
+                                                                                    .getGenericReturnType()))
+                                                            : result instanceof AiMessage m
+                                                                    ? TextProjection.replace(
+                                                                            m, effective)
+                                                                    : TextProjection.nullableString(
+                                                                            effective);
+                                    if (typed
+                                            && PublisherTypes.isPublisher(
+                                                    method.getGenericReturnType())) {
+                                        var publisher =
+                                                new GovernedPublisher(
+                                                        session,
+                                                        input,
+                                                        invoke,
+                                                        TypedValues.argument(
+                                                                method.getGenericReturnType(), 0),
+                                                        PublisherTypes.isStreaming(
+                                                                        method
+                                                                                .getGenericReturnType())
+                                                                ? governance.delivery
+                                                                : StreamDelivery.STRICT,
+                                                        !PublisherTypes.isStreaming(
+                                                                method.getGenericReturnType()));
+                                        Object exposed =
+                                                PublisherTypes.adapt(
+                                                        method.getGenericReturnType(), publisher);
+                                        if (ManagedSession.defer(session, exposed)) {
+                                            publisher.manageSession();
+                                        }
+                                        return exposed;
+                                    }
                                     if (isStreaming(method)) {
                                         return new BufferedTokenStream(
                                                 session,
@@ -483,9 +646,9 @@ public final class LangChain4jGovernance {
                                                         session.runAsync(
                                                                 input,
                                                                 effective -> {
-                                                                    Object value =
+                                                                    Object streamValue =
                                                                             invoke.apply(effective);
-                                                                    if (!(value
+                                                                    if (!(streamValue
                                                                             instanceof
                                                                             TokenStream
                                                                                             nativeStream)) {
@@ -495,6 +658,81 @@ public final class LangChain4jGovernance {
                                                                     var result =
                                                                             new CompletableFuture<
                                                                                     ChatResponse>();
+                                                                    if (typed) {
+                                                                        nativeStream
+                                                                                .onPartialResponse(
+                                                                                        text ->
+                                                                                                io
+                                                                                                        .agt
+                                                                                                        .langchain4j
+                                                                                                        .internal
+                                                                                                        .streaming
+                                                                                                        .StreamSignals
+                                                                                                        .emit(
+                                                                                                                session,
+                                                                                                                "text",
+                                                                                                                text))
+                                                                                .onPartialThinking(
+                                                                                        value ->
+                                                                                                io
+                                                                                                        .agt
+                                                                                                        .langchain4j
+                                                                                                        .internal
+                                                                                                        .streaming
+                                                                                                        .StreamSignals
+                                                                                                        .emit(
+                                                                                                                session,
+                                                                                                                "thinking",
+                                                                                                                value))
+                                                                                .onPartialToolCall(
+                                                                                        value ->
+                                                                                                io
+                                                                                                        .agt
+                                                                                                        .langchain4j
+                                                                                                        .internal
+                                                                                                        .streaming
+                                                                                                        .StreamSignals
+                                                                                                        .emit(
+                                                                                                                session,
+                                                                                                                "tool",
+                                                                                                                value))
+                                                                                .onIntermediateResponse(
+                                                                                        value ->
+                                                                                                io
+                                                                                                        .agt
+                                                                                                        .langchain4j
+                                                                                                        .internal
+                                                                                                        .streaming
+                                                                                                        .StreamSignals
+                                                                                                        .emit(
+                                                                                                                session,
+                                                                                                                "intermediate",
+                                                                                                                value))
+                                                                                .onRetrieved(
+                                                                                        value ->
+                                                                                                io
+                                                                                                        .agt
+                                                                                                        .langchain4j
+                                                                                                        .internal
+                                                                                                        .streaming
+                                                                                                        .StreamSignals
+                                                                                                        .emit(
+                                                                                                                session,
+                                                                                                                "retrieved",
+                                                                                                                value))
+                                                                                .onUnmappedRawEvent(
+                                                                                        value ->
+                                                                                                io
+                                                                                                        .agt
+                                                                                                        .langchain4j
+                                                                                                        .internal
+                                                                                                        .streaming
+                                                                                                        .StreamSignals
+                                                                                                        .emit(
+                                                                                                                session,
+                                                                                                                "raw",
+                                                                                                                value));
+                                                                    }
                                                                     nativeStream
                                                                             .onCompleteResponse(
                                                                                     result
@@ -518,7 +756,9 @@ public final class LangChain4jGovernance {
                                                                                                                 response
                                                                                                                         .aiMessage(),
                                                                                                                 effective))
-                                                                                .build()));
+                                                                                .build()),
+                                                typed ? governance.delivery : StreamDelivery.STRICT,
+                                                typed);
                                     }
                                     if (async) {
                                         return session.runAsync(
@@ -589,6 +829,15 @@ public final class LangChain4jGovernance {
                     || (tool
                             ? (value == void.class || value == Void.class)
                             : value == AiMessage.class);
+        }
+
+        private static void validateType(Class<?> type) {
+            if (!type.isInterface()) {
+                throw new GovernanceException("ai_service_interface_required");
+            }
+            for (Method method : type.getMethods()) {
+                validateMethod(method);
+            }
         }
 
         private static void validateMethod(Method method) {

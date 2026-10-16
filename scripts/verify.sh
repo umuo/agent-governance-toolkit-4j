@@ -11,3 +11,4 @@ java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar data rag-transform exa
 java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar command all
 java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar sandbox all
 java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar security all
+java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar native

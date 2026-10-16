@@ -699,6 +699,33 @@ public final class HostSession implements AutoCloseable {
         }
     }
 
+    /**
+     * 检查并确认一次独立回调披露，不新建顶层运行或重复计入模型/工具预算。
+     *
+     * @param original 原始框架值
+     * @param project 有界策略投影
+     * @param restore 类型恢复
+     * @param <T> 披露值类型
+     * @return 在输出检查和审计确认后的值
+     */
+    public <T> T disclose(
+            T original, Function<T, Object> project, BiFunction<T, Object, T> restore) {
+        String actionId = UUID.randomUUID().toString();
+        try {
+            checkActive();
+            Object effective =
+                    evaluate(InterventionPoint.OUTPUT, actionId, null, project.apply(original));
+            T value = restore.apply(original, effective);
+            checkActive();
+            execution(InterventionPoint.OUTPUT, actionId, "succeeded");
+            return value;
+        } catch (RuntimeException error) {
+            refuse(error instanceof GovernanceException g ? g.code() : "disclosure_failed");
+            execution(InterventionPoint.OUTPUT, actionId, "failed");
+            throw error;
+        }
+    }
+
     public <T> T run(
             Object input,
             Function<Object, T> execute,

@@ -21,28 +21,69 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
- * 单次启动的严格缓冲 TokenStream。
+ * 单次启动的受控 TokenStream。
  *
  * <p>输出检查通过后重放一个有效文本块；通过 completion 等待交付，通过 cancel 取消。
  */
 public final class BufferedTokenStream implements TokenStream {
     private final BufferedStreamControl delegate;
+    private CompletableFuture<ChatResponse> managedCompletion;
+    private final StreamDelivery delivery;
+    private final HostSession session;
+    private final BiConsumer<String, Object> signals;
+    private final boolean extended;
 
     BufferedTokenStream(HostSession session, Supplier<CompletableFuture<ChatResponse>> invoke) {
-        delegate = StreamingAdapters.buffered(session, invoke);
+        this(session, invoke, StreamDelivery.STRICT, false);
+    }
+
+    BufferedTokenStream(
+            HostSession session,
+            Supplier<CompletableFuture<ChatResponse>> invoke,
+            StreamDelivery delivery,
+            boolean extended) {
+        this.session = session;
+        this.delivery = delivery;
+        this.extended = extended;
+        delegate = StreamingAdapters.buffered(session, invoke, delivery, extended);
+        signals = delegate::accept;
+        delegate.completion()
+                .whenComplete(
+                        (value, error) ->
+                                io.agt.langchain4j.internal.streaming.StreamSignals.detach(
+                                        session, signals));
+    }
+
+    /** 实时增量未经最终检查；通过 completion 获取最终经过检查的响应。 */
+    public StreamDelivery deliveryMode() {
+        return delivery;
+    }
+
+    void manageSession(HostSession session) {
+        managedCompletion = ManagedSession.closeAfter(session, delegate.completion());
     }
 
     public CompletableFuture<ChatResponse> completion() {
-        return delegate.completion();
+        return managedCompletion == null ? delegate.completion() : managedCompletion;
     }
 
     public boolean cancel() {
-        return delegate.cancel();
+        return completion().cancel(true);
     }
 
     @Override
     public void start() {
-        delegate.start();
+        if (extended) {
+            io.agt.langchain4j.internal.streaming.StreamSignals.attach(session, signals);
+        }
+        try {
+            delegate.start();
+        } catch (RuntimeException error) {
+            if (delegate.completion().isDone()) {
+                io.agt.langchain4j.internal.streaming.StreamSignals.detach(session, signals);
+            }
+            throw error;
+        }
     }
 
     @Override

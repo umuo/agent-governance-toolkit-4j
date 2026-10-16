@@ -16,6 +16,7 @@ import dev.langchain4j.model.chat.response.StreamingHandle;
 import io.agt.core.AgentControl;
 import io.agt.core.GovernanceException;
 import io.agt.core.HostSession;
+import io.agt.langchain4j.StreamDelivery;
 import io.agt.langchain4j.StreamingLimits;
 import io.agt.langchain4j.internal.model.ModelAdapters;
 import java.util.Set;
@@ -25,26 +26,40 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Flow;
 
 /**
- * 严格缓冲模型装饰器。
+ * 受控流式模型装饰器。
  *
- * <p>整轮 post_model_call 通过后才交付文本与完成事件。
+ * <p>完整响应经 post_model_call 后交付，实时模式可先交付预览增量；工具调用不提前放行。
  */
 final class GovernedStreamingChatModel implements StreamingChatModel {
     private final AgentControl control;
-    private final ChatModel governed;
+    private final StreamingLimits limits;
+    private final StreamDelivery delivery;
     private final StreamingChatModel delegate;
 
     GovernedStreamingChatModel(
-            AgentControl control, StreamingChatModel delegate, StreamingLimits limits) {
+            AgentControl control,
+            StreamingChatModel delegate,
+            StreamingLimits limits,
+            StreamDelivery delivery) {
         this.control = control;
         this.delegate = delegate;
+        this.limits = limits;
+        this.delivery = delivery;
+    }
+
+    private ChatModel governed(StreamingChatResponseHandler handler) {
         ChatModel collected =
                 new ChatModel() {
                     @Override
                     public CompletableFuture<ChatResponse> chatAsync(
                             ChatRequest request, ChatRequestOptions options) {
                         return StreamingCollector.collect(
-                                control.currentSession(), delegate, limits, request, options);
+                                control.currentSession(),
+                                delegate,
+                                limits,
+                                request,
+                                options,
+                                delivery == StreamDelivery.REALTIME ? handler : null);
                     }
 
                     @Override
@@ -52,7 +67,7 @@ final class GovernedStreamingChatModel implements StreamingChatModel {
                         return delegate.defaultRequestParameters();
                     }
                 };
-        governed = ModelAdapters.guard(control, collected);
+        return ModelAdapters.guard(control, collected);
     }
 
     @Override
@@ -69,7 +84,7 @@ final class GovernedStreamingChatModel implements StreamingChatModel {
     public void chat(
             ChatRequest request, ChatRequestOptions options, StreamingChatResponseHandler handler) {
         HostSession session = control.currentSession();
-        CompletableFuture<ChatResponse> future = governed.chatAsync(request, options);
+        CompletableFuture<ChatResponse> future = governed(handler).chatAsync(request, options);
         future.whenComplete(
                 (response, error) -> {
                     try (var scope = session.bind()) {
@@ -80,7 +95,9 @@ final class GovernedStreamingChatModel implements StreamingChatModel {
                         try {
                             session.checkActive();
                             String text = response.aiMessage().text();
-                            if (text != null && !response.aiMessage().hasToolExecutionRequests()) {
+                            if (delivery == StreamDelivery.STRICT
+                                    && text != null
+                                    && !response.aiMessage().hasToolExecutionRequests()) {
                                 handler.onPartialResponse(
                                         new PartialResponse(text),
                                         new PartialResponseContext(
@@ -118,12 +135,13 @@ final class GovernedStreamingChatModel implements StreamingChatModel {
 
     @Override
     public Flow.Publisher<ChatModelStreamingEvent> chat(ChatRequest request) {
-        throw new GovernanceException("reactive_stream_unsupported");
+        return new HandlerPublisher(
+                control.currentSession(), limits, handler -> chat(request, handler));
     }
 
     @Override
     public Flow.Publisher<ChatModelStreamingEvent> doChat(ChatRequest request) {
-        throw new GovernanceException("reactive_stream_unsupported");
+        return chat(request);
     }
 
     @Override

@@ -18,6 +18,20 @@ public final class ToolAdapters {
     private ToolAdapters() {}
 
     public static ToolExecutor guard(AgentControl control, String name, ToolExecutor executor) {
+        return guard(control, name, executor, false);
+    }
+
+    public static ToolExecutor guard(
+            AgentControl control, String name, ToolExecutor executor, boolean typed) {
+        return guard(control, name, executor, typed, ToolCallbacks.NONE);
+    }
+
+    public static ToolExecutor guard(
+            AgentControl control,
+            String name,
+            ToolExecutor executor,
+            boolean typed,
+            ToolCallbacks callbacks) {
         control.requirePoints(
                 Set.of(InterventionPoint.PRE_TOOL_CALL, InterventionPoint.POST_TOOL_CALL));
         if (executor instanceof GovernedToolExecutor) {
@@ -29,7 +43,8 @@ public final class ToolAdapters {
             }
             executor = new CommandToolExecutor(control, registration.command());
         }
-        return new GovernedToolExecutor(control, name, Objects.requireNonNull(executor));
+        return new GovernedToolExecutor(
+                control, name, Objects.requireNonNull(executor), typed, callbacks);
     }
 
     public static ToolExecutor command(AgentControl control, FixedCommand command) {

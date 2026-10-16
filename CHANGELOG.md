@@ -1,5 +1,15 @@
 # 更新记录
 
+## 未发布 — 原生配置与兼容性扩展
+
+- 新增原生 AiServices 配置回调和自动会话 create 入口，保留旧 Builder 和显式会话。
+- 在框架工具注册和记忆初始化扩展点装配治理，保留动态 Provider、立即返回及原生消息/Guardrails 配置。
+- 自动会话覆盖同步、异步、流式/Reactive 完成、取消及未启动过期；现有会话沿用身份和预算。
+- 新原生入口支持普通参数、POJO/集合/Result、默认方法、多模态载荷、Flow 与可选 Reactor。
+- 默认实时增量交付，保留显式 STRICT，完整响应和工具继续治理；旧 Builder 严格契约不变。
+- 增加受控 AI Service listener、工具回调、同步 Moderation 与独立授权的原生工具补偿。
+- 增加离线迁移示例、配置限制说明和行为回归，类型及版本支持范围保持不变。
+
 ## 0.6.0-SNAPSHOT — 2026-10-14
 
 - 新增可选 agt-sandbox，引用 Central 的 agent-sandbox-sdk 0.1.0-alpha.1；core 不引入 JNA。

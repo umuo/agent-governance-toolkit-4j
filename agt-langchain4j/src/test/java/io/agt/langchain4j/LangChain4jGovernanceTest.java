@@ -633,25 +633,26 @@ class LangChain4jGovernanceTest {
     }
 
     @Test
-    void multimodalAndAsyncRefusedWithoutDelegateCalls() {
+    void multimodalIsCheckedAndUnsupportedAsyncStillRefuses() {
         var model = new Model(r -> text("ok"));
         try (var c = control(policy().build(), new ArrayList<>());
                 var s = c.openSession(CONTEXT)) {
             var m = new LangChain4jGovernance(c).guardModel(model);
-            assertThrows(
-                    GovernanceException.class,
-                    () ->
-                            m.chat(
-                                    UserMessage.from(
-                                            ImageContent.from(
-                                                    "https://example.invalid/image.png"))));
-            assertEquals(0, model.calls.get());
+            assertEquals(
+                    "ok",
+                    m.chat(UserMessage.from(ImageContent.from("https://example.invalid/image.png")))
+                            .aiMessage()
+                            .text());
+            assertEquals(1, model.calls.get());
+            org.junit.jupiter.api.Assertions.assertInstanceOf(
+                    ImageContent.class,
+                    ((UserMessage) model.requests.get(0).messages().get(0)).contents().get(0));
         }
         try (var c = control(policy().build(), new ArrayList<>());
                 var s = c.openSession(CONTEXT)) {
             var m = new LangChain4jGovernance(c).guardModel(model);
             assertThrows(CompletionException.class, () -> m.chatAsync("x").join());
-            assertEquals(0, model.calls.get());
+            assertEquals(1, model.calls.get());
         }
     }
 

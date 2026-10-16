@@ -13,6 +13,8 @@ import io.agt.core.InterventionPoint;
 import io.agt.core.JsonValues;
 import io.agt.langchain4j.internal.concurrent.AsyncSources;
 import io.agt.langchain4j.internal.message.TextProjection;
+import io.agt.langchain4j.internal.service.MediaValues;
+import io.agt.langchain4j.internal.service.TypedValues;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -27,17 +29,27 @@ final class GovernedToolExecutor implements ToolExecutor {
     private final AgentControl control;
     private final String toolName;
     private final ToolExecutor delegate;
+    private final boolean typed;
+    private final ToolCallbacks callbacks;
 
-    GovernedToolExecutor(AgentControl control, String toolName, ToolExecutor delegate) {
+    GovernedToolExecutor(
+            AgentControl control,
+            String toolName,
+            ToolExecutor delegate,
+            boolean typed,
+            ToolCallbacks callbacks) {
         this.control = control;
         this.toolName = Identifiers.require(toolName);
         this.delegate = delegate;
+        this.typed = typed;
+        this.callbacks = callbacks;
     }
 
     @Override
     public String execute(ToolExecutionRequest request, Object memoryId) {
         return govern(
                         request,
+                        null,
                         effective ->
                                 ToolExecutionResult.builder()
                                         .resultText(delegate.execute(effective, memoryId))
@@ -48,11 +60,13 @@ final class GovernedToolExecutor implements ToolExecutor {
     @Override
     public ToolExecutionResult executeWithContext(
             ToolExecutionRequest request, InvocationContext context) {
-        return govern(request, effective -> delegate.executeWithContext(effective, context));
+        return govern(
+                request, context, effective -> delegate.executeWithContext(effective, context));
     }
 
     private ToolExecutionResult govern(
             ToolExecutionRequest request,
+            InvocationContext context,
             Function<ToolExecutionRequest, ToolExecutionResult> execute) {
         HostSession session = control.currentSession();
         try {
@@ -60,6 +74,7 @@ final class GovernedToolExecutor implements ToolExecutor {
                 throw new GovernanceException("tool_identity_mismatch");
             }
             var args = JsonValues.parseObject(request.arguments());
+            var actual = new java.util.concurrent.atomic.AtomicReference<ToolExecutionRequest>();
             return session.operationPrepared(
                     true,
                     toolName,
@@ -73,9 +88,19 @@ final class GovernedToolExecutor implements ToolExecutor {
                                                     JsonValues.write(
                                                             TextProjection.object(effective)))
                                             .build()),
-                    execute,
-                    GovernedToolExecutor::project,
-                    GovernedToolExecutor::replace);
+                    effective -> {
+                        actual.set(effective);
+                        callbacks.before(session, effective, context);
+                        var result = execute.apply(effective);
+                        callbacks.rawResult(session, effective, context, result);
+                        return result;
+                    },
+                    this::project,
+                    (original, effective) -> {
+                        var checked = replace(original, effective);
+                        callbacks.after(session, actual.get(), context, checked);
+                        return checked;
+                    });
         } catch (RuntimeException e) {
             String code = e instanceof GovernanceException g ? g.code() : "tool_failed";
             throw session.budgetSnapshot().failed()
@@ -88,31 +113,68 @@ final class GovernedToolExecutor implements ToolExecutor {
         return delegate instanceof CommandToolExecutor command ? command.prepare(request) : request;
     }
 
-    private static Map<String, Object> project(ToolExecutionResult result) {
+    private Map<String, Object> project(ToolExecutionResult result) {
         var p = new LinkedHashMap<String, Object>();
-        if (result.result() != null && !(result.result() instanceof String)) {
+        if (!typed && result.result() != null && !(result.result() instanceof String)) {
             throw new GovernanceException("complex_tool_result_unsupported");
         }
         p.put("text", result.resultText());
-        p.put("result", result.result());
+        p.put("result", typed ? TypedValues.project(result.result()) : result.result());
         p.put("attributes", result.attributes());
         if (result.resultContents().size() != 1
                 || !(result.resultContents().get(0) instanceof TextContent)) {
-            throw new GovernanceException("multimodal_unsupported");
+            if (!typed) {
+                throw new GovernanceException("multimodal_unsupported");
+            }
+            p.put("contents", MediaValues.project(result.resultContents()));
         }
         return TextProjection.object(JsonValues.freeze(p));
     }
 
-    private static ToolExecutionResult replace(ToolExecutionResult original, Object value) {
+    private ToolExecutionResult replace(ToolExecutionResult original, Object value) {
         var p = TextProjection.object(value);
         TextProjection.sameKeys(project(original), p);
         // resultText 和 resultContents 在 LC4j 中是互斥构造入口，不能同时设置。
-        return ToolExecutionResult.builder()
-                .isError(original.isError())
-                .resultText(TextProjection.requiredString(p.get("text")))
-                .result(TextProjection.nullableString(p.get("result")))
-                .attributes(TextProjection.nullableObject(p.get("attributes")))
-                .build();
+        Object result =
+                typed
+                        ? TypedValues.restore(
+                                original.result(),
+                                p.get("result"),
+                                original.result() == null
+                                        ? Object.class
+                                        : original.result().getClass())
+                        : TextProjection.nullableString(p.get("result"));
+        var builder =
+                ToolExecutionResult.builder()
+                        .isError(original.isError())
+                        .result(result)
+                        .attributes(TextProjection.nullableObject(p.get("attributes")));
+        if (p.containsKey("contents")) {
+            builder.resultContents(
+                    MediaValues.restore(original.resultContents(), p.get("contents")));
+        } else {
+            String text = TextProjection.requiredString(p.get("text"));
+            if (original.result() instanceof String old
+                    && old.equals(original.resultText())
+                    && !java.util.Objects.equals(text, result)) {
+                throw new GovernanceException("tool_result_view_mismatch");
+            }
+            if (typed && original.result() != null && !(original.result() instanceof String)) {
+                Object priorText = null;
+                try {
+                    priorText = JsonValues.parse(original.resultText());
+                } catch (RuntimeException ignored) {
+                }
+                if (priorText != null
+                        && TypedValues.equivalent(priorText, TypedValues.project(original.result()))
+                        && !TypedValues.equivalent(
+                                JsonValues.parse(text), TypedValues.project(result))) {
+                    throw new GovernanceException("tool_result_view_mismatch");
+                }
+            }
+            builder.resultText(text);
+        }
+        return builder.build();
     }
 
     @Override
@@ -125,6 +187,7 @@ final class GovernedToolExecutor implements ToolExecutor {
             if (!toolName.equals(request.name())) {
                 throw session.fail(InterventionPoint.PRE_TOOL_CALL, "tool_identity_mismatch");
             }
+            var actual = new java.util.concurrent.atomic.AtomicReference<ToolExecutionRequest>();
             return session.operationAsyncPrepared(
                     true,
                     toolName,
@@ -138,11 +201,39 @@ final class GovernedToolExecutor implements ToolExecutor {
                                                     JsonValues.write(
                                                             TextProjection.object(effective)))
                                             .build()),
-                    effective ->
-                            AsyncSources.normalize(
-                                    delegate.executeAsync(effective, context), "tool"),
-                    GovernedToolExecutor::project,
-                    GovernedToolExecutor::replace);
+                    effective -> {
+                        actual.set(effective);
+                        callbacks.before(session, effective, context);
+                        var source = delegate.executeAsync(effective, context);
+                        var observed =
+                                new CompletableFuture<ToolExecutionResult>() {
+                                    public boolean cancel(boolean interrupt) {
+                                        boolean changed = super.cancel(interrupt);
+                                        if (changed) source.cancel(interrupt);
+                                        return changed;
+                                    }
+                                };
+                        source.whenComplete(
+                                (value, error) -> {
+                                    try (var scope = session.bind()) {
+                                        if (error != null) observed.completeExceptionally(error);
+                                        else {
+                                            session.checkActive();
+                                            callbacks.rawResult(session, effective, context, value);
+                                            observed.complete(value);
+                                        }
+                                    } catch (Throwable failure) {
+                                        observed.completeExceptionally(failure);
+                                    }
+                                });
+                        return AsyncSources.normalize(observed, "tool");
+                    },
+                    this::project,
+                    (original, effective) -> {
+                        var checked = replace(original, effective);
+                        callbacks.after(session, actual.get(), context, checked);
+                        return checked;
+                    });
         } catch (RuntimeException e) {
             if (captured != null && !captured.budgetSnapshot().failed()) {
                 try {

@@ -2,7 +2,7 @@
 
 纯 Java 的 Agent 运行时治理 SDK，首个适配器支持 **LangChain4j 1.20.0**。使用方式参考微软 AGT：加载策略、创建可信会话、通过 `guardModel` / `guardTool` 或受控 AI Services Builder 接入治理。
 
-当前 v0.6 支持同步/异步文本调用、严格缓冲流式、非流式的可选并发工具、RAG/记忆访问授权和八类生命周期干预点（另有两个数据访问点）、工具授权与参数校验、内容检查和改写、动作绑定审批、会话预算、撤销及结构化审计。新增固定命令工具：程序摘要、宿主 argv 模板、枚举参数、环境清理与有界进程执行。可选 agt-sandbox 已接入 Maven Central 沙箱 SDK 0.1.0-alpha.2，显式宿主策略和输出/取消补偿见沙箱指南。功能以治理运行时为中心，不受 LangChain4j Guardrails 的能力边界限制。
+当前 v0.6 支持原生配置接入、同步/异步结构化调用、实时/严格流式、可选并发工具、RAG/记忆访问授权和八类生命周期干预点（另有两个数据访问点）、工具授权与参数校验、内容检查和改写、动作绑定审批、会话预算、撤销及结构化审计。新增固定命令工具：程序摘要、宿主 argv 模板、枚举参数、环境清理与有界进程执行。可选 agt-sandbox 已接入 Maven Central 沙箱 SDK 0.1.0-alpha.2，显式宿主策略和输出/取消补偿见沙箱指南。功能以治理运行时为中心，不受 LangChain4j Guardrails 的能力边界限制。
 
 ## 构建与演示
 
@@ -14,6 +14,7 @@ java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar all
 java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar async all
 java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar stream all
 java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar data all
+java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar native
 # 实际加载 YAML 策略
 java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar allowed examples/policies/default.yaml
 ```
@@ -21,6 +22,10 @@ java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar allowed examples/polic
 `all` 包含允许、跨租户拒绝、参数和结果改写、审批允许、审批拒绝、预算耗尽六个场景。被拒绝场景必须输出 `toolEffects: 0`；改写场景输出 `masked:modified`。
 
 ## 最小接入
+
+已有 LangChain4j Agent 可使用 [原生配置与自动会话入口](docs/native-integration-guide.md)：
+保留 `AiServices` 配置方法，用 `governance.create(Assistant.class, identitySupplier, builder -> ...)`
+构建后直接调用服务；生命周期由 AGT 管理。原受控 Builder 与显式会话继续兼容。
 
 Spring Boot + Next.js 网页对话、流式预览、工具卡片和审批见 [Web Agent 实验台](docs/web-agent-guide.md)。
 
@@ -107,9 +112,13 @@ python3 -m venv .cache/docs-venv
 
 ## 支持边界
 
-支持同步/异步 `ChatModel`、`@Tool`、显式 `ToolExecutor`、动态 `ToolProvider` 及立即返回工具。AI Services 支持 String 参数（另保留 `@MemoryId` 和 `InvocationParameters`）、String / AiMessage 及对应 CompletableFuture/CompletionStage 返回；工具支持单段文本结果和 JSON attributes。同步默认顺序执行，可显式开启并发；异步工具共用原会话预算。
+原生配置入口支持普通参数、POJO/集合/Result<T>、异步结果、default 方法、多模态载荷和原生工具注册。
+TokenStream、Flow.Publisher 和可选 Reactor 接入默认实时，保留 `StreamDelivery.STRICT`；实时增量是未经最终检查的预览。
+AI Service listener、工具回调、Moderation 与独立授权的工具补偿也纳入治理。旧 Builder 的类型及严格流式约束保留。
+具体类型、版本和交付契约见 [原生接入指南](docs/native-integration-guide.md)。
 
-严格缓冲流式交付一个通过最终检查的文本块，详见流式指南；实时逐 token、Reactive Publisher、多模态、复杂返回类型和原始模型 listener 明确拒绝。RAG / ChatMemory 需显式绑定 DataResource，才具备检索前和记忆读写授权；原有 opaque augmentor/raw memory 入口只有上下文与模型边界检查。数据权限依赖宿主对实际隔离分区的绑定，不提供数据库行 ACL 或存储事务。
+原始模型 listener 仍拒绝。媒体检查覆盖元数据和载荷，不等同于语义识别。
+RAG / ChatMemory 需显式绑定 DataResource 才具备数据访问授权；数据权限依赖宿主绑定实际隔离分区，不提供数据库行 ACL 或存储事务。
 
 SDK 保护通过受控构建器或装饰器接入的路径；原始模型、业务工具方法和直接 HTTP / SQL / 文件调用仍由宿主控制。工具执行后的拒绝不能撤销副作用。会话期限阻止新动作和结果交付，不保证安全终止任意已运行的 Java 代码。未做生产环境、长期负载或跨平台验收。
 

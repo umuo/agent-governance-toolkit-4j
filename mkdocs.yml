@@ -4,6 +4,7 @@ nav:
   - 首页: index.md
   - 使用指南:
       - 接入与策略: user-guide.md
+      - 原生配置与自动会话: native-integration-guide.md
       - 异步与并发: async-guide.md
       - 严格缓冲流式: streaming-guide.md
       - RAG 与记忆权限: data-guide.md
@@ -16,6 +17,8 @@ nav:
       - 架构与扩展: architecture.md
       - 关键类与调用机制: key-classes.md
       - 首期需求: requirements.md
+      - 原生接入需求: native-integration-requirements.md
+      - 原生兼容性扩展: native-compatibility-requirements.md
       - 异步需求: async-requirements.md
       - 流式需求: streaming-requirements.md
       - 数据权限需求: data-requirements.md

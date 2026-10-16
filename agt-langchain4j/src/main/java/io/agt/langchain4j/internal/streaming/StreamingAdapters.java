@@ -5,6 +5,7 @@ import io.agt.core.AgentControl;
 import io.agt.core.GovernanceException;
 import io.agt.core.HostSession;
 import io.agt.core.InterventionPoint;
+import io.agt.langchain4j.StreamDelivery;
 import io.agt.langchain4j.StreamingLimits;
 import java.util.Objects;
 import java.util.Set;
@@ -19,6 +20,14 @@ public final class StreamingAdapters {
 
     public static StreamingChatModel guard(
             AgentControl control, StreamingChatModel model, StreamingLimits limits) {
+        return guard(control, model, limits, StreamDelivery.STRICT);
+    }
+
+    public static StreamingChatModel guard(
+            AgentControl control,
+            StreamingChatModel model,
+            StreamingLimits limits,
+            StreamDelivery delivery) {
         Objects.requireNonNull(model);
         control.requirePoints(
                 Set.of(InterventionPoint.PRE_MODEL_CALL, InterventionPoint.POST_MODEL_CALL));
@@ -28,7 +37,8 @@ public final class StreamingAdapters {
         if (model instanceof GovernedStreamingChatModel) {
             throw new GovernanceException("already_governed");
         }
-        return new GovernedStreamingChatModel(control, model, Objects.requireNonNull(limits));
+        return new GovernedStreamingChatModel(
+                control, model, Objects.requireNonNull(limits), delivery);
     }
 
     public static BufferedStreamControl buffered(
@@ -37,6 +47,17 @@ public final class StreamingAdapters {
                             java.util.concurrent.CompletableFuture<
                                     dev.langchain4j.model.chat.response.ChatResponse>>
                     invoke) {
-        return new BufferedStream(session, invoke);
+        return buffered(session, invoke, StreamDelivery.STRICT, false);
+    }
+
+    public static BufferedStreamControl buffered(
+            HostSession session,
+            java.util.function.Supplier<
+                            java.util.concurrent.CompletableFuture<
+                                    dev.langchain4j.model.chat.response.ChatResponse>>
+                    invoke,
+            StreamDelivery delivery,
+            boolean extended) {
+        return new BufferedStream(session, invoke, delivery, extended);
     }
 }

@@ -11,6 +11,8 @@ import io.agt.core.GovernanceException;
 import io.agt.core.HostSession;
 import io.agt.core.JsonValues;
 import io.agt.langchain4j.internal.data.DataAccessSupport;
+import io.agt.langchain4j.internal.service.MediaValues;
+import io.agt.langchain4j.internal.service.TypedValues;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -31,19 +33,17 @@ public final class TextProjection {
         if (message instanceof SystemMessage m) {
             p.put("text", m.text());
         } else if (message instanceof UserMessage m) {
-            if (!m.hasSingleText()) {
-                unsupported();
+            if (m.hasSingleText()) {
+                p.put("text", m.singleText());
+            } else {
+                p.put("contents", MediaValues.project(m.contents()));
             }
-            p.put("text", m.singleText());
             p.put("name", m.name());
-            p.put("attributes", m.attributes());
+            p.put("attributes", TypedValues.project(m.attributes()));
         } else if (message instanceof AiMessage m) {
-            if (m.images() != null && !m.images().isEmpty()) {
-                unsupported();
-            }
             p.put("text", m.text());
             p.put("thinking", m.thinking());
-            p.put("attributes", m.attributes());
+            p.put("attributes", TypedValues.project(m.attributes()));
             p.put(
                     "toolCalls",
                     m.toolExecutionRequests() == null
@@ -52,13 +52,14 @@ public final class TextProjection {
                                     .map(TextProjection::call)
                                     .toList());
         } else if (message instanceof ToolExecutionResultMessage m) {
-            if (!m.hasSingleText()) {
-                unsupported();
+            if (m.hasSingleText()) {
+                p.put("text", m.text());
+            } else {
+                p.put("contents", MediaValues.project(m.contents()));
             }
-            p.put("text", m.text());
             p.put("id", m.id());
             p.put("toolName", m.toolName());
-            p.put("attributes", m.attributes());
+            p.put("attributes", TypedValues.project(m.attributes()));
             p.put("isError", m.isError());
         } else {
             unsupported();
@@ -86,8 +87,11 @@ public final class TextProjection {
         if (original instanceof UserMessage m) {
             fixed(before, p, "name");
             return m.toBuilder()
-                    .contents(List.of(TextContent.from(requiredString(text))))
-                    .attributes(nullableObject(p.get("attributes")))
+                    .contents(
+                            m.hasSingleText()
+                                    ? List.of(TextContent.from(requiredString(text)))
+                                    : MediaValues.restore(m.contents(), p.get("contents")))
+                    .attributes(restoreAttributes(m.attributes(), p.get("attributes")))
                     .build();
         }
         if (original instanceof AiMessage m) {
@@ -115,7 +119,7 @@ public final class TextProjection {
                     .text(text)
                     .thinking(nullableString(p.get("thinking")))
                     .toolExecutionRequests(rewritten)
-                    .attributes(nullableObject(p.get("attributes")))
+                    .attributes(restoreAttributes(m.attributes(), p.get("attributes")))
                     .build();
         }
         if (original instanceof ToolExecutionResultMessage m) {
@@ -123,12 +127,21 @@ public final class TextProjection {
             fixed(before, p, "toolName");
             fixed(before, p, "isError");
             return m.toBuilder()
-                    .contents(List.of(TextContent.from(requiredString(text))))
-                    .attributes(nullableObject(p.get("attributes")))
+                    .contents(
+                            m.hasSingleText()
+                                    ? List.of(TextContent.from(requiredString(text)))
+                                    : MediaValues.restore(m.contents(), p.get("contents")))
+                    .attributes(restoreAttributes(m.attributes(), p.get("attributes")))
                     .build();
         }
         unsupported();
         return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> restoreAttributes(
+            Map<String, Object> original, Object effective) {
+        return (Map<String, Object>) TypedValues.restore(original, effective, Map.class);
     }
 
     public static Map<String, Object> object(Object value) {

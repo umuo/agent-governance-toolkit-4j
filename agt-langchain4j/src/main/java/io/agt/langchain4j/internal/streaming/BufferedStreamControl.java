@@ -13,4 +13,6 @@ public interface BufferedStreamControl extends TokenStream {
     CompletableFuture<ChatResponse> completion();
 
     boolean cancel();
+
+    void accept(String kind, Object value);
 }
