@@ -31,12 +31,20 @@ export default function Page() {
   const composer = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    const controller = new AbortController();
-    Promise.all([fetch('/api/agent/config', { signal: controller.signal }), fetch('/api/agent/scenarios', { signal: controller.signal })]).then(async ([a, b]) => {
-      if (!a.ok || !b.ok) throw new Error('无法连接 Agent 服务，请先启动 Spring Boot。');
-      setConfig(await a.json()); setScenarios(await b.json());
-    }).catch(error => { if (!controller.signal.aborted) setNotice(error.message); });
-    return () => { controller.abort(); abort.current?.abort(); };
+    let active = true;
+
+    Promise.all([fetch('/api/agent/config'), fetch('/api/agent/scenarios')])
+      .then(async ([a, b]) => {
+        if (!active) return;
+        if (!a.ok || !b.ok) throw new Error('无法连接 Agent 服务，请先启动 Spring Boot。');
+        const [configData, scenariosData] = await Promise.all([a.json(), b.json()]);
+        if (!active) return;
+        setConfig(configData); setScenarios(scenariosData);
+      })
+      .catch(error => {
+        if (active) setNotice(error instanceof Error ? error.message : String(error));
+      });
+    return () => { active = false; abort.current?.abort(); };
   }, []);
   useEffect(() => { if (followOutput.current) end.current?.scrollIntoView({ behavior: 'instant', block: 'end' }); }, [turns]);
   useEffect(() => { if (!busy) return; const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, [busy]);
