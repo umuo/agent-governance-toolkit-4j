@@ -30,6 +30,8 @@ import java.util.function.Function;
 final class GovernedPublisher implements Flow.Publisher<Object> {
     static final int PREFETCH = 32;
     private final HostSession session;
+    private final StreamingLimits limits;
+    private final int prefetch;
     private Object input;
     private Function<Object, Object> invoke;
     private final Type elementType;
@@ -46,6 +48,30 @@ final class GovernedPublisher implements Flow.Publisher<Object> {
             Type elementType,
             StreamDelivery delivery,
             boolean singleValue) {
+        this(
+                session,
+                input,
+                invoke,
+                elementType,
+                delivery,
+                singleValue,
+                StreamingLimits.DEFAULT,
+                PREFETCH);
+    }
+
+    GovernedPublisher(
+            HostSession session,
+            Object input,
+            Function<Object, Object> invoke,
+            Type elementType,
+            StreamDelivery delivery,
+            boolean singleValue,
+            StreamingLimits limits,
+            int prefetch) {
+        // 同时校验内部直接调用与公共 Options 入口。
+        var options = new AiServiceOptions(delivery, limits, prefetch);
+        this.limits = options.streamingLimits();
+        this.prefetch = options.publisherPrefetch();
         this.session = session;
         this.input = input;
         this.invoke = invoke;
@@ -322,8 +348,8 @@ final class GovernedPublisher implements Flow.Publisher<Object> {
                     source = upstream;
                     int capacity =
                             delivery == StreamDelivery.REALTIME
-                                    ? PREFETCH - queue.size()
-                                    : PREFETCH;
+                                    ? prefetch - queue.size()
+                                    : prefetch;
                     amount =
                             source != null
                                             && !sourceDone
@@ -367,9 +393,8 @@ final class GovernedPublisher implements Flow.Publisher<Object> {
             // 保存交付前快照，防止接收方修改原始预览后改变最终检查依据。
             synchronized (this) {
                 if (cancelled || terminal || completion.isDone()) return;
-                if (++events > StreamingLimits.DEFAULT.maxEvents()
-                        || (characters += snapshot.length())
-                                > StreamingLimits.DEFAULT.maxCharacters())
+                if (++events > limits.maxEvents()
+                        || (characters += snapshot.length()) > limits.maxCharacters())
                     throw new GovernanceException("stream_capacity_exceeded");
                 if (value instanceof String part) text.append(part);
                 else {
@@ -395,7 +420,7 @@ final class GovernedPublisher implements Flow.Publisher<Object> {
                     outgoing = CallbackViews.checked(session, value, elementType);
                 synchronized (this) {
                     if (cancelled || terminal || completion.isDone()) return;
-                    if (queue.size() >= PREFETCH)
+                    if (queue.size() >= prefetch)
                         throw new GovernanceException("stream_capacity_exceeded");
                     queue.add(outgoing);
                 }

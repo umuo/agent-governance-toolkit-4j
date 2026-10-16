@@ -27,6 +27,8 @@ java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar allowed examples/polic
 保留 `AiServices` 配置方法，用 `governance.create(Assistant.class, identitySupplier, builder -> ...)`
 构建后直接调用服务；生命周期由 AGT 管理。原受控 Builder 与显式会话继续兼容。
 
+Spring Boot 项目可使用 [治理 Starter](docs/spring-boot-guide.md)，通过原生配置回调创建可注入的服务 Bean。
+
 Spring Boot + Next.js 网页对话、流式预览、工具卡片和审批见 [Web Agent 实验台](docs/web-agent-guide.md)。
 
 真实 LLM 多轮工具 Agent 见独立模块 [examples-live](examples-live/README.md) 和 [完整指南](docs/live-agent-guide.md)：支持 `readFile`、`writeFile`、`editFile`、`searchFile`、`listFiles`、可选沙箱 `Bash`，接入 AGT 权限、审批、预算及审计。

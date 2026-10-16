@@ -34,7 +34,7 @@ import io.agt.langchain4j.internal.message.TextProjection;
 import io.agt.langchain4j.internal.model.ModelAdapters;
 import io.agt.langchain4j.internal.rag.RetrievalAdapters;
 import io.agt.langchain4j.internal.service.NativeServices;
-import io.agt.langchain4j.internal.service.PublisherTypes;
+import io.agt.langchain4j.internal.service.ServiceMethods;
 import io.agt.langchain4j.internal.service.TypedValues;
 import io.agt.langchain4j.internal.streaming.StreamingAdapters;
 import io.agt.langchain4j.internal.tool.ToolAdapters;
@@ -68,16 +68,21 @@ import java.util.function.Supplier;
  */
 public final class LangChain4jGovernance {
     private final AgentControl control;
-    private final StreamDelivery delivery;
+    private final AiServiceOptions options;
 
     public LangChain4jGovernance(AgentControl control) {
-        this(control, StreamDelivery.REALTIME);
+        this(control, AiServiceOptions.DEFAULT);
     }
 
     /** 新原生入口显式选择交付契约；旧 Builder/guardStreamingModel 保留严格语义。 */
     public LangChain4jGovernance(AgentControl control, StreamDelivery delivery) {
+        this(control, new AiServiceOptions(delivery, StreamingLimits.DEFAULT, 32));
+    }
+
+    /** 指定此门面创建的原生服务的默认配置。 */
+    public LangChain4jGovernance(AgentControl control, AiServiceOptions options) {
         this.control = Objects.requireNonNull(control);
-        this.delivery = Objects.requireNonNull(delivery);
+        this.options = Objects.requireNonNull(options);
         requireVersion(ChatModel.class, "langchain4j-core");
         requireVersion(AiServices.class, "langchain4j");
     }
@@ -162,7 +167,22 @@ public final class LangChain4jGovernance {
             }
         }
         return new Builder<>(this, type)
-                .wrap(NativeServices.build(control, type, configure, delivery), true);
+                .wrap(NativeServices.build(control, type, configure, options), true);
+    }
+
+    /** 使用服务专属配置，调用方显式管理会话。 */
+    public <T> T aiServices(
+            Class<T> type, AiServiceOptions options, Consumer<AiServices<T>> configure) {
+        return new LangChain4jGovernance(control, options).aiServices(type, configure);
+    }
+
+    /** 使用服务专属配置并自动管理会话。 */
+    public <T> T create(
+            Class<T> type,
+            Supplier<TrustedContext> identity,
+            AiServiceOptions options,
+            Consumer<AiServices<T>> configure) {
+        return new LangChain4jGovernance(control, options).create(type, identity, configure);
     }
 
     /**
@@ -180,6 +200,7 @@ public final class LangChain4jGovernance {
             Class<T> type, Supplier<TrustedContext> identity, Consumer<AiServices<T>> configure) {
         Objects.requireNonNull(identity);
         T service = aiServices(type, configure);
+        var methods = ServiceMethods.inspect(type);
         return type.cast(
                 Proxy.newProxyInstance(
                         type.getClassLoader(),
@@ -215,7 +236,7 @@ public final class LangChain4jGovernance {
                                             }
                                         });
                             } catch (RuntimeException error) {
-                                if (PublisherTypes.isPublisher(method.getGenericReturnType())) {
+                                if (methods.get(method).publisher().publisher()) {
                                     java.util.concurrent.Flow.Publisher<Object> failed =
                                             subscriber -> {
                                                 subscriber.onSubscribe(
@@ -227,8 +248,7 @@ public final class LangChain4jGovernance {
                                                         });
                                                 subscriber.onError(error);
                                             };
-                                    return PublisherTypes.adapt(
-                                            method.getGenericReturnType(), failed);
+                                    return methods.get(method).publisher().adapt(failed);
                                 }
                                 if (Builder.isAsync(method)) {
                                     return CompletableFuture.failedFuture(error);
@@ -523,6 +543,8 @@ public final class LangChain4jGovernance {
         }
 
         private T wrap(T delegate, boolean typed) {
+            var methods =
+                    typed ? ServiceMethods.inspect(type) : Map.<Method, ServiceMethods.Shape>of();
             Object proxy =
                     Proxy.newProxyInstance(
                             type.getClassLoader(),
@@ -538,13 +560,16 @@ public final class LangChain4jGovernance {
                                                 throw new GovernanceException("method_unsupported");
                                     };
                                 }
+                                var shape = methods.get(method);
                                 boolean async = isAsync(method);
                                 try {
                                     HostSession session = governance.control.currentSession();
                                     Object[] original = args == null ? new Object[0] : args.clone();
                                     Map<String, Object> input = new LinkedHashMap<>();
                                     for (int i = 0; i < original.length; i++) {
-                                        if (!trustedParameter(method.getParameters()[i])) {
+                                        if (!(typed
+                                                ? shape.trusted().get(i)
+                                                : trustedParameter(method.getParameters()[i]))) {
                                             input.put(
                                                     Integer.toString(i),
                                                     typed
@@ -558,8 +583,10 @@ public final class LangChain4jGovernance {
                                                 TextProjection.sameKeys(input, values);
                                                 Object[] actual = original.clone();
                                                 for (int i = 0; i < actual.length; i++) {
-                                                    if (!trustedParameter(
-                                                            method.getParameters()[i])) {
+                                                    if (!(typed
+                                                            ? shape.trusted().get(i)
+                                                            : trustedParameter(
+                                                                    method.getParameters()[i]))) {
                                                         actual[i] =
                                                                 typed
                                                                         ? TypedValues.restore(
@@ -568,8 +595,8 @@ public final class LangChain4jGovernance {
                                                                                         Integer
                                                                                                 .toString(
                                                                                                         i)),
-                                                                                method.getGenericParameterTypes()[
-                                                                                        i])
+                                                                                shape.parameters()
+                                                                                        .get(i))
                                                                         : TextProjection
                                                                                 .requiredString(
                                                                                         values.get(
@@ -607,33 +634,30 @@ public final class LangChain4jGovernance {
                                                                     result,
                                                                     effective,
                                                                     TypedValues.resultType(
-                                                                            method
-                                                                                    .getGenericReturnType()))
+                                                                            typed
+                                                                                    ? shape
+                                                                                            .resultType()
+                                                                                    : method
+                                                                                            .getGenericReturnType()))
                                                             : result instanceof AiMessage m
                                                                     ? TextProjection.replace(
                                                                             m, effective)
                                                                     : TextProjection.nullableString(
                                                                             effective);
-                                    if (typed
-                                            && PublisherTypes.isPublisher(
-                                                    method.getGenericReturnType())) {
+                                    if (typed && shape.publisher().publisher()) {
                                         var publisher =
                                                 new GovernedPublisher(
                                                         session,
                                                         input,
                                                         invoke,
-                                                        TypedValues.argument(
-                                                                method.getGenericReturnType(), 0),
-                                                        PublisherTypes.isStreaming(
-                                                                        method
-                                                                                .getGenericReturnType())
-                                                                ? governance.delivery
+                                                        TypedValues.argument(shape.resultType(), 0),
+                                                        shape.publisher().streaming()
+                                                                ? governance.options.delivery()
                                                                 : StreamDelivery.STRICT,
-                                                        !PublisherTypes.isStreaming(
-                                                                method.getGenericReturnType()));
-                                        Object exposed =
-                                                PublisherTypes.adapt(
-                                                        method.getGenericReturnType(), publisher);
+                                                        !shape.publisher().streaming(),
+                                                        governance.options.streamingLimits(),
+                                                        governance.options.publisherPrefetch());
+                                        Object exposed = shape.publisher().adapt(publisher);
                                         if (ManagedSession.defer(session, exposed)) {
                                             publisher.manageSession();
                                         }
@@ -757,7 +781,9 @@ public final class LangChain4jGovernance {
                                                                                                                         .aiMessage(),
                                                                                                                 effective))
                                                                                 .build()),
-                                                typed ? governance.delivery : StreamDelivery.STRICT,
+                                                typed
+                                                        ? governance.options.delivery()
+                                                        : StreamDelivery.STRICT,
                                                 typed);
                                     }
                                     if (async) {

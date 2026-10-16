@@ -18,6 +18,21 @@ import java.util.Map;
 public final class CallbackViews {
     private CallbackViews() {}
 
+    private static final ClassValue<java.util.List<Method>> GETTERS =
+            new ClassValue<>() {
+                @Override
+                protected java.util.List<Method> computeValue(Class<?> type) {
+                    return java.util.Arrays.stream(type.getMethods())
+                            .filter(
+                                    method ->
+                                            method.getParameterCount() == 0
+                                                    && !method.getName().equals("toBuilder")
+                                                    && !method.getName().equals("eventClass")
+                                                    && method.getDeclaringClass() != Object.class)
+                            .toList();
+                }
+            };
+
     public static Object checked(HostSession session, Object value, Type type) {
         if (value == null) {
             return null;
@@ -32,7 +47,7 @@ public final class CallbackViews {
         Class<?> type = original.eventClass();
         Map<Method, Object> values = new HashMap<>();
         try {
-            for (Method method : type.getMethods()) {
+            for (Method method : GETTERS.get(type)) {
                 if (method.getParameterCount() == 0
                         && !method.getName().equals("toBuilder")
                         && !method.getName().equals("eventClass")

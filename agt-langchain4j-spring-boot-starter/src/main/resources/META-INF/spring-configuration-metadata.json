@@ -1,0 +1,9 @@
+{
+  "properties": [
+    {"name":"agt.langchain4j.enabled","type":"java.lang.Boolean","defaultValue":true,"description":"是否启用受治理 AI Service 工厂。"},
+    {"name":"agt.langchain4j.delivery","type":"io.agt.langchain4j.StreamDelivery","defaultValue":"REALTIME","description":"实时预览或完整检查后的严格交付。"},
+    {"name":"agt.langchain4j.max-characters","type":"java.lang.Integer","defaultValue":1048576,"description":"每轮模型流和服务聚合输出的字符上限，1..16777216。"},
+    {"name":"agt.langchain4j.max-events","type":"java.lang.Integer","defaultValue":10000,"description":"每轮模型流和服务聚合输出的事件上限，1..100000。"},
+    {"name":"agt.langchain4j.publisher-prefetch","type":"java.lang.Integer","defaultValue":32,"description":"外层 Publisher 预取与交付队列窗口，1..1024。"}
+  ]
+}

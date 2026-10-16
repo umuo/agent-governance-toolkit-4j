@@ -18,8 +18,7 @@ import dev.langchain4j.service.tool.ToolProviderResult;
 import dev.langchain4j.service.tool.ToolService;
 import io.agt.core.AgentControl;
 import io.agt.core.GovernanceException;
-import io.agt.langchain4j.StreamDelivery;
-import io.agt.langchain4j.StreamingLimits;
+import io.agt.langchain4j.AiServiceOptions;
 import io.agt.langchain4j.internal.memory.MemoryAdapters;
 import io.agt.langchain4j.internal.model.ModelAdapters;
 import io.agt.langchain4j.internal.rag.RetrievalAdapters;
@@ -52,8 +51,8 @@ public final class NativeServices {
             AgentControl control,
             Class<T> type,
             Consumer<AiServices<T>> configure,
-            StreamDelivery delivery) {
-        var builder = new Configuration<T>(control, type, delivery);
+            AiServiceOptions options) {
+        var builder = new Configuration<T>(control, type, options);
         configure.accept(builder);
         return builder.finish();
     }
@@ -122,14 +121,14 @@ public final class NativeServices {
      */
     private static final class Configuration<T> extends AiServices<T> {
         private final AgentControl control;
-        private final StreamDelivery delivery;
+        private final AiServiceOptions options;
         private final Map<AiServiceListener<?>, AiServiceListener<?>> listeners =
                 new java.util.IdentityHashMap<>();
 
-        Configuration(AgentControl control, Class<T> type, StreamDelivery delivery) {
+        Configuration(AgentControl control, Class<T> type, AiServiceOptions options) {
             super(new Context(control, type));
             this.control = control;
-            this.delivery = delivery;
+            this.options = options;
         }
 
         @Override
@@ -272,6 +271,17 @@ public final class NativeServices {
             if (streaming && context.streamingChatModel == null) {
                 throw new GovernanceException("missing_streaming_model");
             }
+            boolean needsChatModel =
+                    Arrays.stream(context.aiServiceClass.getMethods())
+                            .filter(m -> !m.isDefault() && m.getDeclaringClass() != Object.class)
+                            .anyMatch(
+                                    m ->
+                                            m.getReturnType() != TokenStream.class
+                                                    && !PublisherTypes.isStreaming(
+                                                            m.getGenericReturnType()));
+            if (needsChatModel && context.chatModel == null) {
+                throw new GovernanceException("missing_model");
+            }
             if (context.chatModel == null && context.streamingChatModel == null) {
                 throw new GovernanceException("missing_model");
             }
@@ -280,8 +290,8 @@ public final class NativeServices {
                         StreamingAdapters.guard(
                                 control,
                                 context.streamingChatModel,
-                                StreamingLimits.DEFAULT,
-                                delivery);
+                                options.streamingLimits(),
+                                options.delivery());
             }
             if (context.chatModel != null) {
                 context.chatModel = ModelAdapters.guard(control, context.chatModel);

@@ -15,6 +15,48 @@ import java.util.concurrent.Flow;
 public final class PublisherTypes {
     private PublisherTypes() {}
 
+    /** 每个服务构建时固定 SPI 快照，不把宿主 ClassLoader 保存在全局 Map 中。 */
+    public static final class Registry {
+        private final java.util.List<PublisherAdapter> publishers =
+                ServiceLoader.load(PublisherAdapter.class).stream()
+                        .map(ServiceLoader.Provider::get)
+                        .toList();
+        private final java.util.List<dev.langchain4j.spi.services.TokenStreamAdapter> streams =
+                ServiceLoader.load(dev.langchain4j.spi.services.TokenStreamAdapter.class).stream()
+                        .map(ServiceLoader.Provider::get)
+                        .toList();
+
+        public Binding bind(Type type) {
+            Class<?> raw = TypedValues.raw(type);
+            PublisherAdapter selected =
+                    publishers.stream().filter(a -> a.canAdapt(type)).findFirst().orElse(null);
+            boolean streaming =
+                    Flow.Publisher.class.isAssignableFrom(raw)
+                            || selected != null
+                            || raw.getName().equals("reactor.core.publisher.Flux");
+            boolean publisher =
+                    streaming
+                            || reactive(raw)
+                            || streams.stream().anyMatch(a -> a.canAdaptTokenStreamTo(type));
+            if (publisher
+                    && !Flow.Publisher.class.isAssignableFrom(raw)
+                    && selected == null
+                    && !raw.getName().equals("reactor.core.publisher.Flux")
+                    && !raw.getName().equals("reactor.core.publisher.Mono")) {
+                throw new GovernanceException("publisher_adapter_missing");
+            }
+            return new Binding(type, publisher, streaming, selected);
+        }
+    }
+
+    /** 只缓存类型和 SPI 选择；每次调用重新创建实际 Publisher 和治理边界。 */
+    public record Binding(
+            Type type, boolean publisher, boolean streaming, PublisherAdapter adapter) {
+        public Object adapt(Flow.Publisher<?> source) {
+            return PublisherTypes.adapt(type, source, adapter);
+        }
+    }
+
     public static boolean isPublisher(Type type) {
         if (Flow.Publisher.class.isAssignableFrom(TypedValues.raw(type))) {
             return true;
@@ -61,10 +103,13 @@ public final class PublisherTypes {
     }
 
     public static Object adapt(Type type, Flow.Publisher<?> publisher) {
+        return adapt(type, publisher, adapter(type));
+    }
+
+    private static Object adapt(Type type, Flow.Publisher<?> publisher, PublisherAdapter adapter) {
         if (Flow.Publisher.class.isAssignableFrom(TypedValues.raw(type))) {
             return publisher;
         }
-        var adapter = adapter(type);
         if (adapter == null) {
             var raw = TypedValues.raw(type);
             if (raw.getName().equals("reactor.core.publisher.Mono")
@@ -253,10 +298,34 @@ public final class PublisherTypes {
         };
     }
 
+    private record Signature(String name, java.util.List<Class<?>> parameters) {}
+
+    private static final ClassValue<java.util.Map<Signature, java.lang.reflect.Method>> METHODS =
+            new ClassValue<>() {
+                @Override
+                protected java.util.Map<Signature, java.lang.reflect.Method> computeValue(
+                        Class<?> type) {
+                    var methods = new java.util.HashMap<Signature, java.lang.reflect.Method>();
+                    for (var method : type.getMethods()) {
+                        methods.put(
+                                new Signature(
+                                        method.getName(),
+                                        java.util.List.of(method.getParameterTypes())),
+                                method);
+                    }
+                    return java.util.Map.copyOf(methods);
+                }
+            };
+
     private static void call(
             Class<?> type, Object source, String method, Class<?>[] parameters, Object... args) {
         try {
-            type.getMethod(method, parameters).invoke(source, args);
+            var target =
+                    METHODS.get(type).get(new Signature(method, java.util.List.of(parameters)));
+            if (target == null) {
+                throw new GovernanceException("publisher_adapter_failed");
+            }
+            target.invoke(source, args);
         } catch (ReflectiveOperationException error) {
             throw new GovernanceException("publisher_adapter_failed");
         }

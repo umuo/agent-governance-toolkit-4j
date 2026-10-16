@@ -5,6 +5,7 @@ nav:
   - 使用指南:
       - 接入与策略: user-guide.md
       - 原生配置与自动会话: native-integration-guide.md
+      - Spring Boot Starter: spring-boot-guide.md
       - 异步与并发: async-guide.md
       - 严格缓冲流式: streaming-guide.md
       - RAG 与记忆权限: data-guide.md

@@ -172,3 +172,8 @@ answer=masked-value, toolEffects=1, closedSessions=1
 行为测试位于 `agt-langchain4j/src/test/java/io/agt/langchain4j/NativeIntegrationTest.java`；
 本轮边界及资源约束见 [优化需求](native-optimization-requirements.md)。
 规格及选型见 [原生接入需求](native-integration-requirements.md) 与 [兼容性扩展](native-compatibility-requirements.md)。
+
+## 服务级 Options 与 Spring Boot
+
+新原生入口可传 `AiServiceOptions(delivery, streamingLimits, publisherPrefetch)` 按服务覆盖交付模式、模型/聚合容量和预取窗口；
+也可通过治理门面构造器设置默认值。完整 API、默认值及可注入的 Boot 服务示例见 [Spring Boot 接入](spring-boot-guide.md)。

@@ -14,6 +14,10 @@
 - POJO 在序列化写入期间执行字符、节点、容器和深度限制；全局 JSON 数字限制在生成超长十进制文本之前校验。
 - Reactive 使用 32 项预取窗口与有限交付队列；文本检查不再保存每个分片，事件历史使用交付前 JSON 快照，终止后释放内部缓冲。
 
+- 新增不可变服务级 AiServiceOptions，统一原生模型流/聚合容量、交付契约与有限预取；缺模型或交付适配器在装配时失败。
+- 方法与事件反射元数据缓存，服务装配时解析 SPI，不缓存身份、载荷或治理决定。
+- 新增可选 agt-langchain4j-spring-boot-starter，绑定默认属性、可信身份解析器和原生配置工厂，允许宿主 Bean 覆盖。
+
 ## 0.6.0-SNAPSHOT — 2026-10-14
 
 - 新增可选 agt-sandbox，引用 Central 的 agent-sandbox-sdk 0.1.0-alpha.1；core 不引入 JNA。

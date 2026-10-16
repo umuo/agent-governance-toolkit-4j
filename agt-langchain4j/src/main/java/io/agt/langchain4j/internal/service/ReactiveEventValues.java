@@ -18,19 +18,27 @@ public final class ReactiveEventValues {
 
     private record Shape(Constructor<?> constructor, Method payload) {}
 
-    private static Shape shape(AiServiceStreamingEvent event) {
-        for (var constructor : event.getClass().getConstructors()) {
-            var parameters = constructor.getParameterTypes();
-            if (parameters.length == 2 && parameters[1] == InvocationContext.class) {
-                for (var method : event.getClass().getDeclaredMethods()) {
-                    if (method.getParameterCount() == 0
-                            && method.getReturnType() == parameters[0]) {
-                        return new Shape(constructor, method);
+    private static final ClassValue<Shape> SHAPES =
+            new ClassValue<>() {
+                @Override
+                protected Shape computeValue(Class<?> type) {
+                    for (var constructor : type.getConstructors()) {
+                        var parameters = constructor.getParameterTypes();
+                        if (parameters.length == 2 && parameters[1] == InvocationContext.class) {
+                            for (var method : type.getDeclaredMethods()) {
+                                if (method.getParameterCount() == 0
+                                        && method.getReturnType() == parameters[0]) {
+                                    return new Shape(constructor, method);
+                                }
+                            }
+                        }
                     }
+                    throw new GovernanceException("stream_event_shape_unsupported");
                 }
-            }
-        }
-        throw new GovernanceException("stream_event_shape_unsupported");
+            };
+
+    private static Shape shape(AiServiceStreamingEvent event) {
+        return SHAPES.get(event.getClass());
     }
 
     public static Object project(AiServiceStreamingEvent event) {
