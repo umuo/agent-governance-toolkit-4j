@@ -4,6 +4,7 @@ import dev.langchain4j.agent.tool.*;
 import dev.langchain4j.service.tool.DefaultToolExecutor;
 import dev.langchain4j.service.tool.ToolExecutor;
 import io.agt.core.GovernanceException;
+import io.agt.examples.live.tools.WorkspaceTools;
 import io.agt.langchain4j.LangChain4jGovernance;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -50,6 +51,8 @@ final class WebTools {
                     specification,
                     (request, memory) -> {
                         var start = new java.util.concurrent.atomic.AtomicLong();
+                        var recovered =
+                                new java.util.concurrent.atomic.AtomicReference<ToolFailure>();
                         var guarded =
                                 governance.guardTool(
                                         specification.name(),
@@ -74,20 +77,43 @@ final class WebTools {
                                                                 effective.name(),
                                                                 error);
                                                 var failure = ToolFailure.from(error);
-                                                firstFailure.compareAndSet(null, failure);
                                                 for (Throwable cause = error;
                                                         cause != null;
                                                         cause = cause.getCause()) {
                                                     if (cause instanceof GovernanceException g) {
+                                                        firstFailure.compareAndSet(null, failure);
                                                         throw g;
                                                     }
                                                 }
+                                                // 普通文件错误作为结果继续接受 POST_TOOL_CALL 检查；治理异常仍终止。
+                                                if (object instanceof WorkspaceTools
+                                                        && failure.recoverableFileError()) {
+                                                    recovered.set(failure);
+                                                    return failure.result();
+                                                }
+                                                firstFailure.compareAndSet(null, failure);
                                                 throw new GovernanceException(failure.code());
                                             }
                                         });
                         try {
                             String result = guarded.execute(request, memory);
                             // 只有 POST_TOOL_CALL 检查/改写后，工具结果才允许发送到浏览器。
+                            var recovery = recovered.get();
+                            // 若输出策略改写了结果，只发布改写后的 tool_result，不能泄漏原始错误。
+                            if (recovery != null && result.equals(recovery.result())) {
+                                events.send(
+                                        "tool_error",
+                                        Map.of(
+                                                "id", request.id(),
+                                                "name", request.name(),
+                                                "arguments", request.arguments(),
+                                                "code", recovery.code(),
+                                                "message", recovery.message(),
+                                                "hint", recovery.hint(),
+                                                "checked", true,
+                                                "recoverable", true));
+                                return result;
+                            }
                             if (object instanceof io.agt.examples.live.tools.BashTool) {
                                 var report = checkedReport(result);
                                 if (report != null) {

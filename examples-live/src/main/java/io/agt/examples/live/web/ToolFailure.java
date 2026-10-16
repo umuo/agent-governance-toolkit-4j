@@ -63,6 +63,25 @@ record ToolFailure(String code, String message, String hint) {
         return of("tool_failed");
     }
 
+    boolean recoverableFileError() {
+        return switch (code) {
+            case "file_not_found",
+                            "invalid_path",
+                            "regular_file_required",
+                            "file_size_limit",
+                            "invalid_utf8",
+                            "edit_requires_unique_match",
+                            "empty_search_denied" ->
+                    true;
+            default -> false;
+        };
+    }
+
+    String result() {
+        return io.agt.core.JsonValues.write(
+                Map.of("code", code, "message", message, "hint", hint, "recoverable", true));
+    }
+
     private static String bashHint() {
         return "当前 Bash 网络策略为 DENY，禁止访问外网及本机网络服务；curl 等联网命令无法正常访问网络，人工审批不会开放网络。"
                 + "这是已配置的限制，不代表所有命令失败均由网络导致；本地命令仍需排查参数、路径和系统权限。"
@@ -74,7 +93,8 @@ record ToolFailure(String code, String message, String hint) {
                 switch (code) {
                     case "workspace_path_denied", "workspace_link_denied" ->
                             "请使用工作区内的相对路径，例如 notes.txt；人工批准 Bash 不会扩大文件工具的路径范围。";
-                    case "file_not_found" -> "先使用 listFiles 检查文件与父目录是否存在。";
+                    case "file_not_found" ->
+                            "使用 listFiles(\".\") 查看工作区根目录；其他路径均相对于工作区，不要猜测 workspace 子目录。";
                     case "file_access_denied" -> "检查运行后端的系统用户对目标文件及父目录的权限。";
                     case "sandbox_exit_denied", "bash_command_failed" -> bashHint();
                     default -> "可通过本轮 runId 对照服务端日志与审计记录。";

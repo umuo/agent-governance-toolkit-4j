@@ -109,11 +109,10 @@ class AgentWebTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"absolute read", "escape read", "missing read"})
+    @ValueSource(strings = {"absolute read", "escape read"})
     void fileFailureRetainsSpecificCauseAndStopsModelLoop(String prompt) throws Exception {
         var events = chat(prompt, "agent", "strict", ignored -> {});
-        String expected =
-                prompt.equals("missing read") ? "file_not_found" : "workspace_path_denied";
+        String expected = "workspace_path_denied";
         var failure =
                 events.stream()
                         .filter(e -> e.get("type").equals("tool_error"))
@@ -131,6 +130,38 @@ class AgentWebTest {
         assertTrue(String.valueOf(data(terminal).get("message")).contains("后续工具未执行"));
         assertEquals(1, events.stream().filter(e -> e.get("type").equals("model_start")).count());
         assertFalse(has(events, "done"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"strict", "preview"})
+    void missingDirectoryCanBeCorrectedWithoutLosingConversation(String mode) throws Exception {
+        var events = chat("missing directory", "agent", mode, ignored -> {});
+        assertTrue(has(events, "done"), events.toString());
+        assertFalse(has(events, "error"));
+        var error =
+                events.stream()
+                        .filter(e -> e.get("type").equals("tool_error"))
+                        .findFirst()
+                        .orElseThrow();
+        assertEquals("file_not_found", data(error).get("code"));
+        assertEquals(true, data(error).get("recoverable"));
+        assertEquals(true, data(error).get("checked"));
+        assertTrue(
+                events.stream()
+                        .anyMatch(
+                                e ->
+                                        e.get("type").equals("tool_result")
+                                                && data(e).get("name").equals("listFiles")));
+        assertEquals(3, events.stream().filter(e -> e.get("type").equals("model_start")).count());
+        var followUp = chat("check history", "agent", mode, ignored -> {});
+        assertTrue(has(followUp, "done"));
+        assertTrue(
+                followUp.stream()
+                        .anyMatch(
+                                e ->
+                                        e.get("type").equals("answer_delta")
+                                                && String.valueOf(data(e).get("text"))
+                                                        .contains("history retained")));
     }
 
     @ParameterizedTest
@@ -164,7 +195,8 @@ class AgentWebTest {
                         .anyMatch(e -> e.get("type").equals("done")));
         client = freshClient();
         var isolated = chat("read", "agent", mode, ignored -> {});
-        assertTrue(has(isolated, "error"), isolated.toString());
+        assertTrue(has(isolated, "done"), isolated.toString());
+        assertTrue(has(isolated, "tool_error"));
         assertFalse(has(isolated, "tool_result"));
         assertFalse(Files.exists(workspace(isolated).resolve("a.txt")));
     }
@@ -329,6 +361,35 @@ class AgentWebTest {
                         if (String.valueOf(last.get("content")).contains("escape read")) {
                             arguments = "{\"path\":\"../../etc/profile\"}";
                         }
+                        String content = String.valueOf(last.get("content"));
+                        if (!tool && content.equals("missing directory")) {
+                            name = "listFiles";
+                            arguments = "{\"path\":\"workspace\"}";
+                        }
+                        boolean retryDirectory =
+                                tool
+                                        && content.contains("file_not_found")
+                                        && messages.stream()
+                                                .anyMatch(
+                                                        m ->
+                                                                "missing directory"
+                                                                        .equals(
+                                                                                ((Map<?, ?>) m)
+                                                                                        .get(
+                                                                                                "content")));
+                        if (retryDirectory) {
+                            name = "listFiles";
+                            arguments = "{\"path\":\".\"}";
+                        }
+                        boolean checkHistory = !tool && content.equals("check history");
+                        boolean historyRetained =
+                                messages.stream()
+                                        .anyMatch(
+                                                m ->
+                                                        "missing directory"
+                                                                .equals(
+                                                                        ((Map<?, ?>) m)
+                                                                                .get("content")));
                         if (String.valueOf(last.get("content")).contains("slow")) {
                             exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
                             exchange.sendResponseHeaders(200, 0);
@@ -359,13 +420,17 @@ class AgentWebTest {
                             return;
                         }
                         String wire =
-                                tool
+                                (tool && !retryDirectory) || checkHistory
                                         ? chunk(
                                                         Map.of(
                                                                 "role",
                                                                 "assistant",
                                                                 "content",
-                                                                "# Verified\n\n"),
+                                                                checkHistory
+                                                                        ? (historyRetained
+                                                                                ? "history retained"
+                                                                                : "history lost")
+                                                                        : "# Verified\n\n"),
                                                         null)
                                                 + chunk(Map.of("content", "**complete**"), null)
                                                 + chunk(Map.of(), "stop")
