@@ -286,7 +286,7 @@ public final class WebAgentService {
                                         })
                                 .systemMessageProvider(
                                         ignored ->
-                                                "You are a workspace assistant. File tools require relative workspace paths. Inspect before editing and verify changes. "
+                                                "You are a workspace assistant. File tools require relative workspace paths. Use listFiles with path '.' for the workspace root; do not assume a 'workspace' subdirectory exists. Recoverable tool errors are results you can use to correct arguments and continue. Inspect before editing and verify changes. "
                                                         + (config.bashHostReads()
                                                                 ? "Bash is configured for HOST reads: absolute read paths are allowed by the sandbox, subject to OS permissions. "
                                                                 : "Bash business file reads and writes must stay in the workspace; outside business paths and symlink escapes are not allowed. System runtime resources are read-only according to the native sandbox policy. ")
