@@ -189,6 +189,23 @@ class AgentWebTest {
             assertTrue(types.indexOf("text_delta") < types.indexOf("tool_start"));
             assertTrue(types.indexOf("tool_result") < types.lastIndexOf("text_delta"));
         }
+        var budget =
+                data(
+                        events.stream()
+                                .filter(e -> e.get("type").equals("budget"))
+                                .findFirst()
+                                .orElseThrow());
+        assertEquals(2, ((Number) budget.get("modelCalls")).intValue());
+        assertEquals(1, ((Number) budget.get("toolCalls")).intValue());
+        for (String point : List.of("input", "pre_model_call", "pre_tool_call", "post_tool_call")) {
+            long checks =
+                    events.stream()
+                            .filter(e -> e.get("type").equals("governance"))
+                            .filter(e -> point.equals(data(e).get("point")))
+                            .filter(e -> !"EXECUTION".equals(data(e).get("verdict")))
+                            .count();
+            assertEquals(point.equals("pre_model_call") ? 2 : 1, checks, point);
+        }
         assertEquals("verified", Files.readString(workspace(events).resolve("a.txt")));
         assertTrue(
                 chat("read", "agent", mode, ignored -> {}).stream()
@@ -266,7 +283,8 @@ class AgentWebTest {
         for (int i = 0; i < events.size(); i++) {
             var event = events.get(i);
             if (event.get("type").equals("governance")
-                    && "post_tool_call".equals(data(event).get("point"))) {
+                    && "post_tool_call".equals(data(event).get("point"))
+                    && !"EXECUTION".equals(data(event).get("verdict"))) {
                 checked = i;
             }
             if (event.get("type").equals("tool_result")) {
@@ -313,7 +331,7 @@ class AgentWebTest {
 
         @Bean
         @Primary
-        WebAgentService testService(Fixture fixture) {
+        WebAgentService testService(Fixture fixture, WebAgentRuntimeFactory runtimes) {
             return new WebAgentService(
                     Map.of(
                             "LLM_BASE_URL",
@@ -325,7 +343,8 @@ class AgentWebTest {
                             "AGT_WORKSPACE",
                             fixture.root.resolve("work").toString(),
                             "AGT_AUDIT_DIR",
-                            fixture.root.resolve("audit").toString()));
+                            fixture.root.resolve("audit").toString()),
+                    runtimes);
         }
     }
 

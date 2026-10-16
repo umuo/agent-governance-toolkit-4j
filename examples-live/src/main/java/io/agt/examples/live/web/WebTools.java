@@ -34,6 +34,41 @@ final class WebTools {
             AgentEvents events,
             LangChain4jGovernance governance,
             java.util.concurrent.atomic.AtomicReference<ToolFailure> firstFailure) {
+        return register(object, events, governance, firstFailure, null);
+    }
+
+    /** 原生服务由 Starter 包装工具，结果事件延迟至受控 after 回调。 */
+    static final class NativeRegistration {
+        private final AgentEvents events;
+        private final java.util.concurrent.atomic.AtomicReference<ToolFailure> failure;
+        private final Map<String, java.util.function.Consumer<String>> deliveries =
+                new LinkedHashMap<>();
+
+        NativeRegistration(
+                AgentEvents events,
+                java.util.concurrent.atomic.AtomicReference<ToolFailure> failure) {
+            this.events = events;
+            this.failure = failure;
+        }
+
+        Map<ToolSpecification, ToolExecutor> register(Object object) {
+            return WebTools.register(object, events, null, failure, this);
+        }
+
+        void after(dev.langchain4j.service.tool.ToolExecution execution) {
+            var delivery = deliveries.remove(execution.request().id());
+            if (delivery != null) {
+                delivery.accept(execution.result());
+            }
+        }
+    }
+
+    private static Map<ToolSpecification, ToolExecutor> register(
+            Object object,
+            AgentEvents events,
+            LangChain4jGovernance governance,
+            java.util.concurrent.atomic.AtomicReference<ToolFailure> firstFailure,
+            NativeRegistration nativeRegistration) {
         var tools = new LinkedHashMap<ToolSpecification, ToolExecutor>();
         for (var method : object.getClass().getMethods()) {
             if (!method.isAnnotationPresent(Tool.class)) {
@@ -53,118 +88,131 @@ final class WebTools {
                         var start = new java.util.concurrent.atomic.AtomicLong();
                         var recovered =
                                 new java.util.concurrent.atomic.AtomicReference<ToolFailure>();
-                        var guarded =
-                                governance.guardTool(
-                                        specification.name(),
-                                        (effective, id) -> {
-                                            start.set(System.nanoTime());
-                                            events.send(
-                                                    "tool_start",
-                                                    Map.of(
-                                                            "id",
-                                                            effective.id(),
-                                                            "name",
-                                                            effective.name(),
-                                                            "arguments",
-                                                            effective.arguments()));
-                                            try {
-                                                return executor.execute(effective, id);
-                                            } catch (RuntimeException error) {
-                                                // 必须在 guardTool 转成 tool_failed 前保存反射执行的根因。
-                                                LoggerFactory.getLogger(WebTools.class)
-                                                        .error(
-                                                                "Raw tool {} failed",
-                                                                effective.name(),
-                                                                error);
-                                                var failure = ToolFailure.from(error);
-                                                for (Throwable cause = error;
-                                                        cause != null;
-                                                        cause = cause.getCause()) {
-                                                    if (cause instanceof GovernanceException g) {
-                                                        firstFailure.compareAndSet(null, failure);
-                                                        throw g;
-                                                    }
-                                                }
-                                                // 普通文件错误作为结果继续接受 POST_TOOL_CALL 检查；治理异常仍终止。
-                                                if (object instanceof WorkspaceTools
-                                                        && failure.recoverableFileError()) {
-                                                    recovered.set(failure);
-                                                    return failure.result();
-                                                }
+                        ToolExecutor raw =
+                                (effective, id) -> {
+                                    start.set(System.nanoTime());
+                                    events.send(
+                                            "tool_start",
+                                            Map.of(
+                                                    "id",
+                                                    effective.id(),
+                                                    "name",
+                                                    effective.name(),
+                                                    "arguments",
+                                                    effective.arguments()));
+                                    try {
+                                        return executor.execute(effective, id);
+                                    } catch (RuntimeException error) {
+                                        // 必须在 guardTool 转成 tool_failed 前保存反射执行的根因。
+                                        LoggerFactory.getLogger(WebTools.class)
+                                                .error(
+                                                        "Raw tool {} failed",
+                                                        effective.name(),
+                                                        error);
+                                        var failure = ToolFailure.from(error);
+                                        for (Throwable cause = error;
+                                                cause != null;
+                                                cause = cause.getCause()) {
+                                            if (cause instanceof GovernanceException g) {
                                                 firstFailure.compareAndSet(null, failure);
-                                                throw new GovernanceException(failure.code());
+                                                throw g;
                                             }
-                                        });
+                                        }
+                                        // 普通文件错误作为结果继续接受 POST_TOOL_CALL 检查；治理异常仍终止。
+                                        if (object instanceof WorkspaceTools
+                                                && failure.recoverableFileError()) {
+                                            recovered.set(failure);
+                                            return failure.result();
+                                        }
+                                        firstFailure.compareAndSet(null, failure);
+                                        throw new GovernanceException(failure.code());
+                                    }
+                                };
+                        var guarded =
+                                nativeRegistration == null
+                                        ? governance.guardTool(specification.name(), raw)
+                                        : raw;
                         try {
-                            String result = guarded.execute(request, memory);
-                            // 只有 POST_TOOL_CALL 检查/改写后，工具结果才允许发送到浏览器。
-                            var recovery = recovered.get();
-                            // 若输出策略改写了结果，只发布改写后的 tool_result，不能泄漏原始错误。
-                            if (recovery != null && result.equals(recovery.result())) {
-                                events.send(
-                                        "tool_error",
-                                        Map.of(
-                                                "id", request.id(),
-                                                "name", request.name(),
-                                                "arguments", request.arguments(),
-                                                "code", recovery.code(),
-                                                "message", recovery.message(),
-                                                "hint", recovery.hint(),
-                                                "checked", true,
-                                                "recoverable", true));
-                                return result;
-                            }
-                            if (object instanceof io.agt.examples.live.tools.BashTool) {
-                                var report = checkedReport(result);
-                                if (report != null) {
-                                    int exitCode = ((Number) report.get("exitCode")).intValue();
-                                    String stdout = (String) report.get("stdout");
-                                    String stderr = (String) report.get("stderr");
-                                    if (exitCode != 0) {
-                                        String message =
-                                                stderr.isBlank()
-                                                        ? "命令失败，但没有捕获到 stderr。若脚本使用 2>/dev/null，错误已被脚本丢弃；可移除该重定向后重新执行。"
-                                                        : stderr;
+                            String rawResult = guarded.execute(request, memory);
+                            java.util.function.Consumer<String> deliver =
+                                    result -> {
+                                        // 只有 POST_TOOL_CALL 检查/改写后，工具结果才允许发送到浏览器。
+                                        var recovery = recovered.get();
+                                        // 若输出策略改写了结果，只发布改写后的 tool_result，不能泄漏原始错误。
+                                        if (recovery != null && result.equals(recovery.result())) {
+                                            events.send(
+                                                    "tool_error",
+                                                    Map.of(
+                                                            "id", request.id(),
+                                                            "name", request.name(),
+                                                            "arguments", request.arguments(),
+                                                            "code", recovery.code(),
+                                                            "message", recovery.message(),
+                                                            "hint", recovery.hint(),
+                                                            "checked", true,
+                                                            "recoverable", true));
+                                            return;
+                                        }
+                                        if (object instanceof io.agt.examples.live.tools.BashTool) {
+                                            var report = checkedReport(result);
+                                            if (report != null) {
+                                                int exitCode =
+                                                        ((Number) report.get("exitCode"))
+                                                                .intValue();
+                                                String stdout = (String) report.get("stdout");
+                                                String stderr = (String) report.get("stderr");
+                                                if (exitCode != 0) {
+                                                    String message =
+                                                            stderr.isBlank()
+                                                                    ? "命令失败，但没有捕获到 stderr。若脚本使用 2>/dev/null，错误已被脚本丢弃；可移除该重定向后重新执行。"
+                                                                    : stderr;
+                                                    events.send(
+                                                            "tool_error",
+                                                            Map.of(
+                                                                    "id",
+                                                                    request.id(),
+                                                                    "name",
+                                                                    request.name(),
+                                                                    "arguments",
+                                                                    request.arguments(),
+                                                                    "code",
+                                                                    "bash_command_failed",
+                                                                    "message",
+                                                                    message,
+                                                                    "exitCode",
+                                                                    exitCode,
+                                                                    "stdout",
+                                                                    stdout,
+                                                                    "stderr",
+                                                                    stderr,
+                                                                    "checked",
+                                                                    true,
+                                                                    "recoverable",
+                                                                    true));
+                                                    // 普通命令失败是可供模型处理的工具结果，不将会话标记为失败。
+                                                    return;
+                                                }
+                                            }
+                                        }
                                         events.send(
-                                                "tool_error",
+                                                "tool_result",
                                                 Map.of(
                                                         "id",
                                                         request.id(),
                                                         "name",
                                                         request.name(),
-                                                        "arguments",
-                                                        request.arguments(),
-                                                        "code",
-                                                        "bash_command_failed",
-                                                        "message",
-                                                        message,
-                                                        "exitCode",
-                                                        exitCode,
-                                                        "stdout",
-                                                        stdout,
-                                                        "stderr",
-                                                        stderr,
-                                                        "checked",
-                                                        true,
-                                                        "recoverable",
-                                                        true));
-                                        // 普通命令失败是可供模型处理的工具结果，不将会话标记为失败。
-                                        return result;
-                                    }
-                                }
+                                                        "result",
+                                                        result,
+                                                        "durationMs",
+                                                        (System.nanoTime() - start.get())
+                                                                / 1_000_000));
+                                    };
+                            if (nativeRegistration == null) {
+                                deliver.accept(rawResult);
+                            } else {
+                                nativeRegistration.deliveries.put(request.id(), deliver);
                             }
-                            events.send(
-                                    "tool_result",
-                                    Map.of(
-                                            "id",
-                                            request.id(),
-                                            "name",
-                                            request.name(),
-                                            "result",
-                                            result,
-                                            "durationMs",
-                                            (System.nanoTime() - start.get()) / 1_000_000));
-                            return result;
+                            return rawResult;
                         } catch (RuntimeException error) {
                             LoggerFactory.getLogger(WebTools.class)
                                     .error("Tool {} failed", request.name(), error);

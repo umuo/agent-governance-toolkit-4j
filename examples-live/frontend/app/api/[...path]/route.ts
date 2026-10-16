@@ -3,7 +3,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 async function proxy(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
-  if (path[0] !== 'agent' || path.some(part => part === '..' || !/^[a-zA-Z0-9-]+$/.test(part))) {
+  if (!['agent', 'examples'].includes(path[0]) || path.some(part => part === '..' || !/^[a-zA-Z0-9-]+$/.test(part))) {
     return Response.json({ message: 'Unknown API' }, { status: 404 });
   }
   const headers = new Headers();

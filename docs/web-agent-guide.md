@@ -2,11 +2,32 @@
 
 `examples-live` 现在是 Spring Boot 服务，`examples-live/frontend` 是独立 Next.js 项目。保留真实 OpenAI 兼容请求、文件工具与可选 Bash，增加网页连续对话、Markdown、SSE 运行事件、动作审批、停止和清空会话。
 
+## 入门案例：先从这里看
+
+首页按文件夹列出案例，默认打开最简单的普通聊天。入门案例只用普通 JSON 请求，每次独立问答，不启用历史记忆、SSE、文件工具、Bash、审批或运行观察。页面“查看最简代码”读取 JAR 内实际打包的 Java 文件；护栏案例还可展开共用配置。
+
+| 文件夹 | 案例 / 源文件 | 观察重点 |
+| --- | --- | --- |
+| 原生 LangChain4j | `PlainChatExample.java` | `AiServices.builder(...).chatModel(...).build()` |
+| 原生 LangChain4j | `CalculatorExample.java` | 加一个纯计算 `@Tool`，观察工具循环 |
+| 安全护栏入门 | `InputGuardExample.java` | 输入包含“导出全部客户”时，模型调用前拒绝 |
+| 安全护栏入门 | `OutputMaskExample.java` | 最终答案的演示号码 `13800138000` 替换为 `138****8000` |
+| 安全护栏入门 | `ToolPermissionExample.java` | 模型请求 `readInternalNote`，无 `notes.read` 权限时不执行工具 |
+| 完整 Agent | 工作区实验台 | 原有文件、审批、流式、预算与审计演示 |
+
+代码均在 `examples-live/src/main/java/io/agt/examples/live/web/simple/`。阅读顺序为 `PlainChatExample` → `CalculatorExample` → `SimpleExamplesConfiguration` → 三个护栏案例 → `SimpleExamplesController`。护栏案例通过 Starter 的 `GovernedAiServices.create(...)` 创建服务，自动管理会话；三者共享同一组规则与无权限演示身份。输入检查为字面匹配、脱敏只替换指定演示号码，不代表语义检测或通用隐私识别。工具案例使用固定便签文本，没有真实内部资料。模型是否选择调用工具由模型决定，页面推荐提问用于触发该路径。
+
+简单案例只需要 `LLM_API_KEY`、`LLM_MODEL` 与可选 `LLM_BASE_URL`，不要求工作区配置。原始案例不使用 AGT 护栏。共用运行时的审计为显式空实现，便于聚焦最小接入；需要完整审计时使用工作区实验台。
+
+前端使用非默认端口时，可通过 Spring 属性 `agt.examples.frontend-origin` 配置允许的完整来源（默认 `http://127.0.0.1:3000`，也接受本机 3000/8080 的常用 localhost 来源）。
+
+接口为 `GET /api/examples`（目录）、`GET /api/examples/{id}/source`（实际源码）、`POST /api/examples/{id}/chat`（`{"message":"..."}`）。对话返回 `status, answer, code`；`status=blocked` 表示本次护栏拒绝，下次请求会使用新会话。未知 ID 返回 404，空白或超长输入返回 400；Provider 失败返回 502 且不回传原始异常。页面只保留本地展示记录，切换案例会清空该展示。
+
 ## 运行
 
 要求 JDK 17+、Maven、Node.js 22.18+（或兼容的更新版本）、npm。
 
-1. 在 `examples-live/.env.local` 配置 `LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`、`AGT_WORKSPACE` 和工作区外的 `AGT_AUDIT_DIR`。新克隆仓库先复制 `.env.example`；本地文件不进入 Git 或 JAR。
+1. 在 `examples-live/.env.local` 配置 `LLM_API_KEY`、`LLM_MODEL` 和可选的 `LLM_BASE_URL`。运行完整 Agent 时，再配置 `AGT_WORKSPACE` 和工作区外的 `AGT_AUDIT_DIR`。新克隆仓库先复制 `.env.example`；本地文件不进入 Git 或 JAR。
 2. 在仓库根目录构建并启动后端：
 
 ```bash
@@ -54,7 +75,25 @@ AGT 当前的严格治理契约要求完整内容检查，不能把原始 token 
 
 完整过程实时渲染属于实验模式：预览内容可能被后续检查拒绝，页面在失败/取消后仍保留过程内容，并标注未检查；历史展示不代表治理放行。因此它不具备严格模式的交付保证。页面只展示模型接口实际提供的 reasoning_content / PartialThinking，不构造或推断未返回的内部推理。严格模式不发布 reasoning 增量，不用字符串定时切分冒充模型 token。
 
-模型桥接器将真实流聚合为 `ChatResponse` 供 `guardModel` 完整检查；`HostSession.run` 包围用户输入和最终输出，工具使用 `guardTool`。事件装饰器放在正确检查边界之外，只把授权后的参数和检查后的工具结果交给前端。工具参数碎片本身不触发执行。
+模型桥接器将真实流聚合为 `ChatResponse`，通过 Starter 的 `GovernedAiServices.create(...)` 注册原生模型、记忆和工具；输入、模型、工具与最终输出的治理由工厂统一装配。工具开始事件在授权后的执行器中发布，结果事件在受控 `afterToolExecution` 回调中发布。工具参数碎片本身不触发执行。
+
+## Starter 装配与配置
+
+`examples-live` 直接依赖 `agt-langchain4j-spring-boot-starter`。每轮策略、审计文件和浏览器审批都不同，因此 `WebAgentRuntimeFactory` 为每轮建立一个独立 Spring 上下文，注册宿主 `AgentControl`、`TrustedContextResolver` 并启用 Starter 自动配置，取得 `GovernedAiServices`。关闭该上下文会销毁本轮运行时。不同浏览器和不同轮次不会共享运行时或预算。
+
+为支持停止操作及预算展示，Web 宿主仍显式开启 `HostSession`；Starter 工厂复用已有会话，不创建第二套预算。可信身份与权限由服务器根据会话和场景生成，浏览器输入不参与授权。CLI 继续使用基础 SDK，不启动 Spring 上下文。
+
+独立上下文继承宿主 Spring Environment，原生服务的容量可在 `application.yml` 或通过 Spring 环境变量配置：
+
+```yaml
+agt:
+  langchain4j:
+    max-characters: 1048576
+    max-events: 10000
+    publisher-prefetch: 32
+```
+
+默认值、范围与覆盖方式见 [Spring Boot 接入](spring-boot-guide.md)。这些属性是 Starter 服务配置；本例使用同步服务返回最终答案，页面 `strict` / `preview` 仍由模型桥接器控制，`delivery` 和 Publisher 预取不切换页面模式。关闭 `agt.langchain4j.enabled` 后，本例不能创建受治理服务，任务会失败。
 
 ## API
 
