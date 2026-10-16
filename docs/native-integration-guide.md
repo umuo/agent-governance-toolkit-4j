@@ -137,13 +137,22 @@ Memory Provider 必须依据宿主身份解析实际分区；任意 MemoryId 不
 | 原始模型 listener | 仍拒绝，它可能在装饰器检查前收到 provider 原文；使用受控 AI Service listener |
 | 配置回调内 build | 仍拒绝 `native_builder_build_managed`，最终构建统一由 AGT 完成 |
 
-补偿参数包含 `arguments`、`receipt`（工具对象结果）和 `text`（工具文本结果），策略必须声明这些字段的规则、
-所需权限与审批。补偿目标不得通过参数改写变更；内部保留原始业务回执，不使用对模型脱敏后的值回滚。
+补偿参数始终包含 `arguments`；非空时才提供 `receipt`（工具对象结果）和 `text`（工具文本结果）。策略必须声明这些字段的规则、
+所需权限与审批。`void @Tool` 的空对象回执会省略，策略应将 `receipt` 设为可选；显式要求该字段时仍会拒绝。补偿目标不得通过参数改写变更；内部保留原始业务回执，不使用对模型脱敏后的值回滚。
 成功补偿的记忆结果标记为 `compensated_due_to_tool_error`。补偿计入工具预算；
 取消、撤销、到期、审计故障或 POST_TOOL_CALL 拒绝导致的失败会话不会自动恢复执行补偿。
 这不提供存储事务或“任何异常都已回滚”的保证。
 
 保留 `@MemoryId` 和 `InvocationParameters`；版本仍固定为 1.20.0。
+
+Reactive 外层按 32 项窗口分批预取，慢消费者不会一次性申请完整事件额度。严格模式仍需读取完整输出后检查。
+文本流最终 OUTPUT 目标保留拼接后的 `text`，`items` 不再逐条保存 String 分片；自定义策略应对完整 `text` 检查。
+事件流的历史以交付前 JSON 快照参与最终检查，实时已交付事件不再保留原始回调对象。
+HTTP/SSE 等推送 Provider 无法由外层 demand 完全暂停，其底层缓冲和取消继续受 `StreamingLimits` 约束。
+
+普通 POJO 的 JSON 写入在达到容量、节点或深度限制时停止，随后仍由原生 codec 恢复并校验往返形状。
+有界写入对齐固定版本默认 Jackson 配置、注解、日期和 sealed 类型；非默认 `JsonCodecFactory` 的私有编码逻辑不会自动复用，
+需要单独适配，不声称任意自定义 codec 都完全兼容。自定义 getter/serializer 中的任意 Java 行为不属于此容量限制的隔离范围。
 固定命令继续使用旧 Builder 的 `commandTool` 或单独 `guardCommand` 入口。
 
 ## 离线运行验证
@@ -161,4 +170,5 @@ answer=masked-value, toolEffects=1, closedSessions=1
 
 源码在 `examples/src/main/java/io/agt/examples/NativeIntegrationDemo.java`。
 行为测试位于 `agt-langchain4j/src/test/java/io/agt/langchain4j/NativeIntegrationTest.java`；
+本轮边界及资源约束见 [优化需求](native-optimization-requirements.md)。
 规格及选型见 [原生接入需求](native-integration-requirements.md) 与 [兼容性扩展](native-compatibility-requirements.md)。

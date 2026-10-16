@@ -10,6 +10,10 @@
 - 增加受控 AI Service listener、工具回调、同步 Moderation 与独立授权的原生工具补偿。
 - 增加离线迁移示例、配置限制说明和行为回归，类型及版本支持范围保持不变。
 
+- 修复 void 工具补偿：空回执/文本省略，可选字段不再因 null 被拒绝，required/授权/审批/预算语义保持。
+- POJO 在序列化写入期间执行字符、节点、容器和深度限制；全局 JSON 数字限制在生成超长十进制文本之前校验。
+- Reactive 使用 32 项预取窗口与有限交付队列；文本检查不再保存每个分片，事件历史使用交付前 JSON 快照，终止后释放内部缓冲。
+
 ## 0.6.0-SNAPSHOT — 2026-10-14
 
 - 新增可选 agt-sandbox，引用 Central 的 agent-sandbox-sdk 0.1.0-alpha.1；core 不引入 JNA。

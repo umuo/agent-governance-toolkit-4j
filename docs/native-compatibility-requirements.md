@@ -37,9 +37,11 @@
 Reactive 非法 demand 和未订阅资源清理。保留原有严格模式回归，不用“支持实时”弱化严格模式断言。
 最后在 JDK 17/21 运行全量验证，更新使用指南和当前兼容性矩阵。
 
-## 本机验收记录
+## 本机验收记录（兼容扩展阶段）
 
-本轮新增 32 项兼容性测试，使用真实 AiServices 装配和确定性本地模型；可选 Reactor
+以下记录对应 `11fd857`；后续验收见 [边界与资源优化](native-optimization-requirements.md)。
+
+本阶段新增 32 项兼容性测试，使用真实 AiServices 装配和确定性本地模型；可选 Reactor
 仅在测试范围引入 `langchain4j-reactor:1.20.0-beta30`，生产制品不强制依赖 Reactor。
 
 | 环境 | 全量 clean verify | 测试结果 |

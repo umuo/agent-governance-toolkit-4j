@@ -28,9 +28,10 @@ import java.util.function.Function;
  * <p>首次有效 demand 才调用原生服务；保持背压、取消、最终检查和自有会话关闭关联。
  */
 final class GovernedPublisher implements Flow.Publisher<Object> {
+    static final int PREFETCH = 32;
     private final HostSession session;
-    private final Object input;
-    private final Function<Object, Object> invoke;
+    private Object input;
+    private Function<Object, Object> invoke;
     private final Type elementType;
     private final StreamDelivery delivery;
     private final boolean singleValue;
@@ -52,6 +53,11 @@ final class GovernedPublisher implements Flow.Publisher<Object> {
         this.delivery = delivery;
         this.singleValue = singleValue;
         session.watchTermination(completion);
+        completion.whenComplete(
+                (value, error) -> {
+                    this.input = null;
+                    this.invoke = null;
+                });
     }
 
     void manageSession() {
@@ -80,13 +86,21 @@ final class GovernedPublisher implements Flow.Publisher<Object> {
                 });
     }
 
-    private record Batch(List<Object> items, String text) {}
+    private record Batch(
+            List<Object> items, List<Object> history, List<Integer> indexes, String text) {}
 
     private final class Subscription implements Flow.Subscription {
         private final Flow.Subscriber<? super Object> downstream;
         private final ArrayDeque<Object> queue = new ArrayDeque<>();
-        private final List<Object> all = new ArrayList<>();
-        private final StringBuilder text = new StringBuilder();
+        // 实时已交付事件只保留有界 JSON，不保留其原生上下文/宿主对象图。
+        private final List<String> history = new ArrayList<>();
+        private final List<Object> retained = new ArrayList<>();
+        private final List<Integer> indexes = new ArrayList<>();
+        private StringBuilder text = new StringBuilder();
+        private final AtomicInteger requesting = new AtomicInteger();
+        private long outstanding;
+        private int events;
+        private boolean sourceDone;
         private final AtomicInteger draining = new AtomicInteger();
         private final BiConsumer<String, Object> signals = this::signal;
         private long demand;
@@ -128,9 +142,13 @@ final class GovernedPublisher implements Flow.Publisher<Object> {
             try (var scope = session.bind()) {
                 session.checkActive();
                 StreamSignals.attach(session, signals);
+                Object runInput = input;
+                var execution = invoke;
+                input = null;
+                invoke = null;
                 running =
                         session.runAsync(
-                                input,
+                                runInput,
                                 effective -> {
                                     var result = new CompletableFuture<Batch>();
                                     result.whenComplete(
@@ -139,27 +157,38 @@ final class GovernedPublisher implements Flow.Publisher<Object> {
                                                     upstream.cancel();
                                                 }
                                             });
-                                    PublisherTypes.flow(invoke.apply(effective))
+                                    PublisherTypes.flow(execution.apply(effective))
                                             .subscribe(
                                                     new Flow.Subscriber<>() {
                                                         public void onSubscribe(
                                                                 Flow.Subscription source) {
-                                                            upstream = source;
-                                                            if (completion.isDone() || cancelled) {
-                                                                source.cancel();
-                                                            } else {
-                                                                source.request(
-                                                                        (long)
-                                                                                        StreamingLimits
-                                                                                                .DEFAULT
-                                                                                                .maxEvents()
-                                                                                + 1);
+                                                            synchronized (Subscription.this) {
+                                                                if (upstream != null
+                                                                        || completion.isDone()
+                                                                        || cancelled) {
+                                                                    source.cancel();
+                                                                    return;
+                                                                }
+                                                                upstream = source;
                                                             }
+                                                            requestUpstream();
                                                         }
 
                                                         public void onNext(Object value) {
                                                             try (var binding = session.bind()) {
+                                                                synchronized (Subscription.this) {
+                                                                    if (sourceDone
+                                                                            || cancelled
+                                                                            || terminal
+                                                                            || completion.isDone())
+                                                                        return;
+                                                                    if (outstanding <= 0)
+                                                                        throw new GovernanceException(
+                                                                                "publisher_without_demand");
+                                                                    outstanding--;
+                                                                }
                                                                 receive(value, false);
+                                                                requestUpstream();
                                                             } catch (Throwable error) {
                                                                 result.completeExceptionally(
                                                                         safe(error));
@@ -172,39 +201,66 @@ final class GovernedPublisher implements Flow.Publisher<Object> {
                                                         }
 
                                                         public void onComplete() {
-                                                            synchronized (Subscription.this) {
+                                                            try {
+                                                                List<String> snapshots;
+                                                                List<Object> values;
+                                                                List<Integer> positions;
+                                                                String joined;
+                                                                synchronized (Subscription.this) {
+                                                                    if (cancelled
+                                                                            || terminal
+                                                                            || sourceDone) return;
+                                                                    sourceDone = true;
+                                                                    snapshots =
+                                                                            List.copyOf(history);
+                                                                    values = List.copyOf(retained);
+                                                                    positions =
+                                                                            List.copyOf(indexes);
+                                                                    joined = text.toString();
+                                                                    releaseTranscript();
+                                                                    upstream = null;
+                                                                }
                                                                 result.complete(
                                                                         new Batch(
-                                                                                List.copyOf(all),
-                                                                                text.toString()));
+                                                                                values,
+                                                                                snapshots.stream()
+                                                                                        .map(
+                                                                                                JsonValues
+                                                                                                        ::parse)
+                                                                                        .toList(),
+                                                                                positions,
+                                                                                joined));
+                                                            } catch (Throwable error) {
+                                                                result.completeExceptionally(
+                                                                        safe(error));
                                                             }
                                                         }
                                                     });
                                     return result;
                                 },
-                                batch ->
-                                        Map.of(
-                                                "text",
-                                                batch.text(),
-                                                "items",
-                                                TypedValues.project(batch.items())),
+                                batch -> Map.of("text", batch.text(), "items", batch.history()),
                                 (batch, effective) -> {
                                     var values =
                                             io.agt.langchain4j.internal.message.TextProjection
                                                     .object(effective);
                                     io.agt.langchain4j.internal.message.TextProjection.sameKeys(
-                                            Map.of("text", batch.text(), "items", batch.items()),
+                                            Map.of("text", batch.text(), "items", batch.history()),
                                             values);
                                     String checkedText =
                                             io.agt.langchain4j.internal.message.TextProjection
                                                     .requiredString(values.get("text"));
-                                    @SuppressWarnings("unchecked")
-                                    List<Object> checked =
-                                            (List<Object>)
-                                                    TypedValues.restore(
-                                                            batch.items(),
-                                                            values.get("items"),
-                                                            List.class);
+                                    var effectiveItems =
+                                            io.agt.langchain4j.internal.message.TextProjection.list(
+                                                    values.get("items"));
+                                    if (effectiveItems.size() != batch.history().size())
+                                        throw new GovernanceException("typed_value_shape_mismatch");
+                                    List<Object> checked = new ArrayList<>();
+                                    for (int i = 0; i < batch.items().size(); i++)
+                                        checked.add(
+                                                TypedValues.restore(
+                                                        batch.items().get(i),
+                                                        effectiveItems.get(batch.indexes().get(i)),
+                                                        elementType));
                                     if (delivery == StreamDelivery.STRICT
                                             && TypedValues.raw(elementType) == String.class) {
                                         checked =
@@ -212,7 +268,7 @@ final class GovernedPublisher implements Flow.Publisher<Object> {
                                                         ? List.of()
                                                         : List.of(checkedText);
                                     }
-                                    return new Batch(checked, checkedText);
+                                    return new Batch(checked, List.of(), List.of(), checkedText);
                                 });
                 if (completion.isDone()) {
                     running.cancel(true);
@@ -256,47 +312,95 @@ final class GovernedPublisher implements Flow.Publisher<Object> {
             }
         }
 
+        private void requestUpstream() {
+            if (requesting.getAndIncrement() != 0) return;
+            int missed = 1;
+            do {
+                Flow.Subscription source;
+                long amount;
+                synchronized (this) {
+                    source = upstream;
+                    int capacity =
+                            delivery == StreamDelivery.REALTIME
+                                    ? PREFETCH - queue.size()
+                                    : PREFETCH;
+                    amount =
+                            source != null
+                                            && !sourceDone
+                                            && !cancelled
+                                            && !terminal
+                                            && failure == null
+                                            && !completion.isDone()
+                                    ? Math.max(0, capacity - outstanding)
+                                    : 0;
+                    outstanding += amount;
+                }
+                if (amount > 0) {
+                    try (var scope = session.bind()) {
+                        session.checkActive();
+                        source.request(amount);
+                    } catch (Throwable error) {
+                        fail(error);
+                    }
+                }
+                missed = requesting.addAndGet(-missed);
+            } while (missed != 0);
+        }
+
+        private synchronized void releaseTranscript() {
+            history.clear();
+            retained.clear();
+            indexes.clear();
+            text = new StringBuilder();
+        }
+
         private void receive(Object value, boolean approved) {
             session.checkActive();
             if (!approved
                     && (value instanceof AiServiceStreamingEvent.BeforeToolExecutionEvent
-                            || value instanceof AiServiceStreamingEvent.AfterToolExecutionEvent)) {
+                            || value instanceof AiServiceStreamingEvent.AfterToolExecutionEvent))
                 return;
+            String snapshot = JsonValues.write(TypedValues.project(value));
+            boolean deliver =
+                    delivery == StreamDelivery.REALTIME
+                            && !(value instanceof AiServiceStreamingEvent.FinalResponseEvent);
+            // 保存交付前快照，防止接收方修改原始预览后改变最终检查依据。
+            synchronized (this) {
+                if (cancelled || terminal || completion.isDone()) return;
+                if (++events > StreamingLimits.DEFAULT.maxEvents()
+                        || (characters += snapshot.length())
+                                > StreamingLimits.DEFAULT.maxCharacters())
+                    throw new GovernanceException("stream_capacity_exceeded");
+                if (value instanceof String part) text.append(part);
+                else {
+                    int position = history.size();
+                    history.add(snapshot);
+                    if (delivery == StreamDelivery.STRICT
+                            || singleValue
+                            || value instanceof AiServiceStreamingEvent.FinalResponseEvent) {
+                        retained.add(value);
+                        indexes.add(position);
+                    }
+                }
+                if (value instanceof AiServiceStreamingEvent.PartialResponseEvent part)
+                    text.append(part.partialResponse().text());
             }
-            add(value);
-            if (value instanceof String part) {
-                text.append(part);
-            }
-            if (value instanceof AiServiceStreamingEvent.PartialResponseEvent part) {
-                text.append(part.partialResponse().text());
-            }
-            if (delivery == StreamDelivery.REALTIME
-                    && !(value instanceof AiServiceStreamingEvent.FinalResponseEvent)) {
+            if (deliver) {
                 Object outgoing = value;
                 if (value instanceof AiServiceStreamingEvent
                         && !(value instanceof AiServiceStreamingEvent.PartialResponseEvent)
                         && !(value instanceof AiServiceStreamingEvent.PartialThinkingEvent)
                         && !(value instanceof AiServiceStreamingEvent.PartialToolCallEvent)
-                        && !(value instanceof AiServiceStreamingEvent.RawEvent)) {
+                        && !(value instanceof AiServiceStreamingEvent.RawEvent))
                     outgoing = CallbackViews.checked(session, value, elementType);
-                }
                 synchronized (this) {
+                    if (cancelled || terminal || completion.isDone()) return;
+                    if (queue.size() >= PREFETCH)
+                        throw new GovernanceException("stream_capacity_exceeded");
                     queue.add(outgoing);
                 }
                 drain();
             }
-        }
-
-        private synchronized void add(Object value) {
-            if (cancelled || terminal || completion.isDone()) {
-                return;
-            }
-            characters += JsonValues.write(TypedValues.project(value)).length();
-            if (all.size() >= StreamingLimits.DEFAULT.maxEvents()
-                    || characters > StreamingLimits.DEFAULT.maxCharacters()) {
-                throw new GovernanceException("stream_capacity_exceeded");
-            }
-            all.add(value);
         }
 
         private void signal(String kind, Object value) {
@@ -331,6 +435,7 @@ final class GovernedPublisher implements Flow.Publisher<Object> {
                 }
                 cancelled = true;
                 queue.clear();
+                releaseTranscript();
             }
             if (upstream != null) {
                 upstream.cancel();
@@ -350,6 +455,7 @@ final class GovernedPublisher implements Flow.Publisher<Object> {
                 }
                 failure = safe(error);
                 queue.clear();
+                releaseTranscript();
             }
             session.refuse(safe(error).code());
             if (upstream != null) {
@@ -410,6 +516,7 @@ final class GovernedPublisher implements Flow.Publisher<Object> {
                                 session.checkActive();
                                 downstream.onNext(next);
                             }
+                        requestUpstream();
                     } catch (Throwable error) {
                         if (finished) {
                             downstream.onError(safe(error));

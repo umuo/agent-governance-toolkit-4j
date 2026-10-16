@@ -25,14 +25,14 @@ import java.util.concurrent.CompletionStage;
 /**
  * 原生声明类型和有界策略值之间的转换。
  *
- * <p>复用框架 JSON codec，恢复后再比较投影，拒绝隐式强转、未知属性丢失及数值截断。
+ * <p>对齐固定版本原生 JSON 配置并在写入时限额，使用原生 codec 恢复后再比较投影，拒绝隐式强转、未知属性丢失及数值截断。
  */
 public final class TypedValues {
     private TypedValues() {}
 
     public static Object project(Object value) {
         try {
-            return JsonValues.freeze(snapshot(value, 0));
+            return JsonValues.freeze(snapshot(value, 0, new ProjectionBudget()));
         } catch (GovernanceException error) {
             throw error;
         } catch (RuntimeException | StackOverflowError error) {
@@ -40,71 +40,81 @@ public final class TypedValues {
         }
     }
 
-    private static Object snapshot(Object value, int depth) {
-        if (depth > 32) {
-            throw new GovernanceException("payload_limit");
+    private static final class ProjectionBudget {
+        int characters = JsonValues.MAX_CHARACTERS;
+        int nodes = JsonValues.MAX_NODES;
+
+        void consume(Object value) {
+            int length = value instanceof String text ? text.length() : 1;
+            if (length > characters || --nodes < 0) throw new GovernanceException("payload_limit");
+            characters -= length;
         }
+    }
+
+    private static Object snapshot(Object value, int depth, ProjectionBudget budget) {
+        if (depth > JsonValues.MAX_DEPTH) throw new GovernanceException("payload_limit");
         if (value == null
                 || value instanceof String
                 || value instanceof Number
                 || value instanceof Boolean) {
+            budget.consume(value);
             return value;
         }
-        if (value instanceof java.time.Duration duration) return duration.toString();
-        if (FrameworkValues.supports(value)) {
-            return FrameworkValues.project(value);
-        }
-        if (value instanceof ChatMessage message) {
-            return TextProjection.message(message);
-        }
-        if (value instanceof dev.langchain4j.service.Result<?> result) {
-            return ServiceResultProjection.project(result);
-        }
-        if (value instanceof dev.langchain4j.data.message.Content content) {
-            return MediaValues.project(List.of(content)).get(0);
-        }
-        if (value instanceof dev.langchain4j.data.image.Image image) {
-            return MediaValues.image(image);
-        }
-        if (value instanceof Optional<?> optional) {
-            return snapshot(optional.orElse(null), depth + 1);
-        }
+        if (value instanceof java.time.Duration duration)
+            return snapshot(duration.toString(), depth, budget);
+        if (FrameworkValues.supports(value))
+            return snapshot(FrameworkValues.project(value), depth, budget);
+        if (value instanceof ChatMessage message)
+            return snapshot(TextProjection.message(message), depth, budget);
+        if (value instanceof dev.langchain4j.service.Result<?> result)
+            return snapshot(ServiceResultProjection.project(result), depth, budget);
+        if (value instanceof dev.langchain4j.data.message.Content content)
+            return snapshot(MediaValues.project(List.of(content)).get(0), depth, budget);
+        if (value instanceof dev.langchain4j.data.image.Image image)
+            return snapshot(MediaValues.image(image), depth, budget);
+        if (value instanceof Optional<?> optional)
+            return snapshot(optional.orElse(null), depth, budget);
         if (value instanceof Map<?, ?> map) {
-            if (map.size() > 4096) {
+            if (map.size() > JsonValues.MAX_CONTAINER_SIZE)
                 throw new GovernanceException("payload_limit");
-            }
+            if (map.keySet().stream().anyMatch(key -> !(key instanceof String)))
+                return pojo(value, depth, budget);
+            budget.consume(value);
             var copy = new LinkedHashMap<String, Object>();
             for (var entry : map.entrySet()) {
-                if (!(entry.getKey() instanceof String key)) {
-                    // 非字符串键交给框架 codec，再由声明类型恢复和往返验证约束。
-                    return JsonValues.parse(Json.toJson(value));
-                }
-                copy.put(key, snapshot(entry.getValue(), depth + 1));
+                String key = (String) entry.getKey();
+                budget.consume(key);
+                copy.put(key, snapshot(entry.getValue(), depth + 1, budget));
             }
             return copy;
         }
         if (value instanceof Collection<?> collection) {
-            if (collection.size() > 4096) {
+            if (collection.size() > JsonValues.MAX_CONTAINER_SIZE)
                 throw new GovernanceException("payload_limit");
-            }
+            budget.consume(value);
             var copy = new ArrayList<Object>();
-            for (Object item : collection) {
-                copy.add(snapshot(item, depth + 1));
-            }
+            for (var item : collection) copy.add(snapshot(item, depth + 1, budget));
             return copy;
         }
         if (value.getClass().isArray()) {
             int length = Array.getLength(value);
-            if (length > 4096) {
+            if (length > JsonValues.MAX_CONTAINER_SIZE)
                 throw new GovernanceException("payload_limit");
-            }
+            budget.consume(value);
             var copy = new ArrayList<Object>();
-            for (int i = 0; i < length; i++) {
-                copy.add(snapshot(Array.get(value, i), depth + 1));
-            }
+            for (int i = 0; i < length; i++)
+                copy.add(snapshot(Array.get(value, i), depth + 1, budget));
             return copy;
         }
-        return JsonValues.parse(Json.toJson(value));
+        return pojo(value, depth, budget);
+    }
+
+    private static Object pojo(Object value, int depth, ProjectionBudget budget) {
+        return snapshot(
+                BoundedPojoJson.project(
+                        value, budget.characters, budget.nodes, JsonValues.MAX_DEPTH - depth),
+                depth,
+                budget);
     }
 
     public static Object restore(Object original, Object effective, Type type) {

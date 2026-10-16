@@ -21,15 +21,22 @@ import java.util.TreeMap;
  * <p>有界严格 JSON 和仅在本项目内稳定的摘要；不声称 RFC 8785 / ACS 兼容。
  */
 public final class JsonValues {
+    public static final int MAX_CHARACTERS = 1_048_576;
+    public static final int MAX_NODES = 8192;
+    public static final int MAX_DEPTH = 32;
+    public static final int MAX_CONTAINER_SIZE = 4096;
+    public static final int MAX_NUMBER_LENGTH = 128;
+    private static final int MAX_NUMBER_BITS =
+            (int) Math.ceil(MAX_NUMBER_LENGTH * (Math.log(10) / Math.log(2)));
     private static final JsonMapper MAPPER =
             JsonMapper.builder(
                             JsonFactory.builder()
                                     .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
                                     .streamReadConstraints(
                                             StreamReadConstraints.builder()
-                                                    .maxNestingDepth(32)
-                                                    .maxStringLength(1_048_576)
-                                                    .maxNumberLength(128)
+                                                    .maxNestingDepth(MAX_DEPTH)
+                                                    .maxStringLength(MAX_CHARACTERS)
+                                                    .maxNumberLength(MAX_NUMBER_LENGTH)
                                                     .build())
                                     .build())
                     .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
@@ -41,7 +48,7 @@ public final class JsonValues {
     private JsonValues() {}
 
     public static Object parse(String text) {
-        if (text == null || text.length() > 1_048_576) {
+        if (text == null || text.length() > MAX_CHARACTERS) {
             throw new GovernanceException("invalid_json");
         }
         try {
@@ -88,8 +95,8 @@ public final class JsonValues {
     }
 
     private static final class SizeBudget {
-        int chars = 1_048_576;
-        int nodes = 8192;
+        int chars = MAX_CHARACTERS;
+        int nodes = MAX_NODES;
 
         void consume(int n) {
             chars -= n;
@@ -101,14 +108,14 @@ public final class JsonValues {
 
     private static Object freeze(Object v, int depth, SizeBudget budget) {
         budget.consume(v instanceof String s ? s.length() : 1);
-        if (depth > 32) {
+        if (depth > MAX_DEPTH) {
             throw new GovernanceException("payload_limit");
         }
         if (v == null || v instanceof Boolean) {
             return v;
         }
         if (v instanceof String s) {
-            if (s.length() > 1_048_576) {
+            if (s.length() > MAX_CHARACTERS) {
                 throw new GovernanceException("payload_limit");
             }
             for (int i = 0; i < s.length(); i++) {
@@ -138,10 +145,17 @@ public final class JsonValues {
                     || n instanceof java.math.BigInteger)) {
                 throw new GovernanceException("invalid_number");
             }
+            // 拒绝超长数字时先检查位数，避免为超大 BigInteger/BigDecimal 分配完整十进制字符串。
+            if ((n instanceof java.math.BigInteger integer && integer.bitLength() > MAX_NUMBER_BITS)
+                    || (n instanceof java.math.BigDecimal decimal
+                            && decimal.unscaledValue().bitLength() > MAX_NUMBER_BITS)
+                    || n.toString().length() > MAX_NUMBER_LENGTH) {
+                throw new GovernanceException("payload_limit");
+            }
             return n;
         }
         if (v instanceof Map<?, ?> map) {
-            if (map.size() > 4096) {
+            if (map.size() > MAX_CONTAINER_SIZE) {
                 throw new GovernanceException("payload_limit");
             }
             Map<String, Object> copy = new TreeMap<>();
@@ -156,7 +170,7 @@ public final class JsonValues {
             return Collections.unmodifiableMap(copy);
         }
         if (v instanceof List<?> list) {
-            if (list.size() > 4096) {
+            if (list.size() > MAX_CONTAINER_SIZE) {
                 throw new GovernanceException("payload_limit");
             }
             List<Object> copy = new ArrayList<>();

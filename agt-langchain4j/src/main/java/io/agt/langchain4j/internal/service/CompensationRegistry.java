@@ -88,8 +88,10 @@ final class CompensationRegistry {
                 var receipt = action.receipt();
                 var target = new LinkedHashMap<String, Object>();
                 target.put("arguments", JsonValues.parseObject(receipt.request().arguments()));
-                target.put("receipt", TypedValues.project(receipt.resultObject()));
-                target.put("text", receipt.result());
+                // 空字段不进入动作参数；可选字段可省略，策略仍可通过 required 拒绝缺失。
+                if (receipt.resultObject() != null)
+                    target.put("receipt", TypedValues.project(receipt.resultObject()));
+                if (receipt.result() != null) target.put("text", receipt.result());
                 control.currentSession()
                         .operationPrepared(
                                 true,

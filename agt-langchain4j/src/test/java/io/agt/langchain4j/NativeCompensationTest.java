@@ -157,4 +157,134 @@ class NativeCompensationTest {
                     authorized ? List.of("reserve", "undo") : List.of("reserve"), tools.effects);
         }
     }
+
+    static class VoidTools {
+        final List<String> effects = new ArrayList<>();
+
+        @Tool
+        void reserveVoid() {
+            effects.add("reserve");
+        }
+
+        @CompensateFor("reserveVoid")
+        void undo(ToolExecution receipt) {
+            assertNull(receipt.resultObject());
+            assertEquals("Success", receipt.result());
+            effects.add("undo");
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"allow", "deny", "required", "budget", "approval", "approval-deny"})
+    void voidCompensationOmitsNullReceiptWithoutRelaxingAuthorization(String mode) {
+        var tools = new VoidTools();
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var approvals = new java.util.concurrent.atomic.AtomicInteger();
+        var model =
+                new NativeIntegrationTest.NativeModel(
+                        r -> {
+                            if (calls.getAndIncrement() == 0)
+                                return ChatResponse.builder()
+                                        .aiMessage(
+                                                AiMessage.from(
+                                                        ToolExecutionRequest.builder()
+                                                                .id("v")
+                                                                .name("reserveVoid")
+                                                                .arguments("{}")
+                                                                .build(),
+                                                        ToolExecutionRequest.builder()
+                                                                .id("f")
+                                                                .name("failure")
+                                                                .arguments("{}")
+                                                                .build()))
+                                        .build();
+                            assertTrue(
+                                    r.messages()
+                                            .toString()
+                                            .contains("compensated_due_to_tool_error"));
+                            return LangChain4jGovernanceTest.text("done");
+                        });
+        var policy =
+                NativeIntegrationTest.policy()
+                        .tool(
+                                "reserveVoid",
+                                new ToolRule(Set.of("read"), ParameterRule.object(Map.of()), false))
+                        .tool(
+                                "failure",
+                                new ToolRule(
+                                        Set.of("read"), ParameterRule.object(Map.of()), false));
+        if (!mode.equals("deny"))
+            policy.tool(
+                    "compensate_reserveVoid",
+                    new ToolRule(
+                            Set.of("read"),
+                            ParameterRule.object(
+                                    Map.of(
+                                            "arguments",
+                                            ParameterRule.object(Map.of()),
+                                            "receipt",
+                                            ParameterRule.string(null),
+                                            "text",
+                                            ParameterRule.string(null)),
+                                    mode.equals("required")
+                                            ? new String[] {"arguments", "receipt", "text"}
+                                            : new String[] {"arguments", "text"}),
+                            mode.startsWith("approval")));
+        ToolExecutor fail =
+                new ToolExecutor() {
+                    public String execute(ToolExecutionRequest request, Object id) {
+                        return "failed";
+                    }
+
+                    public ToolExecutionResult executeWithContext(
+                            ToolExecutionRequest request,
+                            dev.langchain4j.invocation.InvocationContext context) {
+                        return ToolExecutionResult.builder()
+                                .isError(true)
+                                .resultText("failed")
+                                .build();
+                    }
+                };
+        try (var control =
+                AgentControl.builder(policy.build())
+                        .budget(new BudgetLimits(10, mode.equals("budget") ? 2 : 10, 5000))
+                        .approvalResolver(
+                                request -> {
+                                    approvals.incrementAndGet();
+                                    var args =
+                                            JsonValues.parseObject(
+                                                    JsonValues.write(request.action().target()));
+                                    assertFalse(args.containsKey("receipt"));
+                                    return java.util.concurrent.CompletableFuture.completedFuture(
+                                            mode.equals("approval-deny")
+                                                    ? io.agt.core.approval.ApprovalResponse.deny(
+                                                            request)
+                                                    : io.agt.core.approval.ApprovalResponse.allow(
+                                                            request));
+                                })
+                        .audit(r -> {})
+                        .build()) {
+            var service =
+                    new LangChain4jGovernance(control)
+                            .create(
+                                    NativeIntegrationTest.Assistant.class,
+                                    () -> NativeIntegrationTest.CTX,
+                                    b ->
+                                            b.chatModel(model)
+                                                    .tools(tools)
+                                                    .tools(
+                                                            Map.of(
+                                                                    ToolSpecification.builder()
+                                                                            .name("failure")
+                                                                            .description("failure")
+                                                                            .build(),
+                                                                    fail))
+                                                    .compensateOnToolErrors(true));
+            boolean allowed = mode.equals("allow") || mode.equals("approval");
+            if (allowed) assertEquals("done", service.chat("hello"));
+            else assertThrows(GovernanceException.class, () -> service.chat("hello"));
+            assertEquals(allowed ? List.of("reserve", "undo") : List.of("reserve"), tools.effects);
+            assertEquals(mode.startsWith("approval") ? 1 : 0, approvals.get());
+        }
+    }
 }

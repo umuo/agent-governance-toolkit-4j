@@ -19,6 +19,7 @@ nav:
       - 首期需求: requirements.md
       - 原生接入需求: native-integration-requirements.md
       - 原生兼容性扩展: native-compatibility-requirements.md
+      - 原生边界与资源优化: native-optimization-requirements.md
       - 异步需求: async-requirements.md
       - 流式需求: streaming-requirements.md
       - 数据权限需求: data-requirements.md
