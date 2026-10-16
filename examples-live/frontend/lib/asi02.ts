@@ -1,4 +1,6 @@
-export type Observation = { status: string; code: string; answer: string; modelCalls: number; before: Record<string, unknown>; after: Record<string, unknown>; requestedCalls: { name: string; arguments: string }[]; audit: { point: string; verdict: string; reason: string; approval: string; execution: string }[] };
+export type TraceStep = { sequence: number; elapsedMillis: number; round: number; kind: string; body: unknown };
+
+export type Observation = { trace?: TraceStep[]; status: string; code: string; answer: string; modelCalls: number; before: Record<string, unknown>; after: Record<string, unknown>; requestedCalls: { name: string; arguments: string }[]; audit: { point: string; verdict: string; reason: string; approval: string; execution: string }[] };
 
 // 仅依据真实业务快照判定目标副作用，不把候选调用或模型自述当作已执行。
 export function hasTargetEffect(caseId: string, result: Observation): boolean {

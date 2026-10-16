@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { CollapsibleIntro } from '@/components/collapsible-intro';
 import { Markdown } from '@/components/markdown';
 import { type Tool } from '@/components/tool-card';
 import { ExecutionProcess, type Approval } from '@/components/execution-process';
@@ -137,9 +138,10 @@ export function AdvancedChat({ onBusyChange }: { onBusyChange: (busy: boolean) =
 
   return <div className="advanced-shell">
     <main className="main">
-      <header className="header"><div><span className="eyebrow">AGENT LAB <span>/</span> PLAYGROUND</span><h1>完整 Agent · 工作区实验台</h1></div><div className="connection"><span className={config?.configured ? 'online' : 'offline'} />{config?.configured ? '模型已配置' : '等待配置'}</div></header>
+      <CollapsibleIntro eyebrow="AGENT LAB / PLAYGROUND" title="完整 Agent · 工作区实验台" badge={<div className="connection"><span className={config?.configured ? 'online' : 'offline'} />{config?.configured ? '模型已配置' : '等待配置'}</div>}>
       <div className="controls"><button type="button" disabled={busy} onClick={() => reset()}>新对话</button><div className="control-group"><ShieldCheck size={15} /><label htmlFor="profile">治理策略</label><select id="profile" value={profile} disabled={busy} onChange={event => reset(event.target.value)}>{profiles.map(item => <option value={item.id} key={item.id}>{item.label}</option>)}</select></div><div className="control-group"><label htmlFor="mode">输出模式</label><select id="mode" value={mode} disabled={busy} onChange={event => setMode(event.target.value)}><option value="strict">严格检查后交付</option><option value="preview">完整过程实时渲染</option></select></div><span className="model-name">{config?.model || '尚未配置模型'}</span></div>
       {mode === 'preview' && <div className="preview-notice">实时展示每轮 response content、接口实际返回的 reasoning 和工具调用。过程输出尚未通过完整检查，结束或失败后仍保留供查看；工具执行始终受授权控制。</div>}
+      </CollapsibleIntro>
       {notice && <div className="notice" role="alert">{notice}</div>}
       {config && !config.configured && <div className="notice" role="alert">请填写 examples-live/.env.local 的 LLM_API_KEY、LLM_MODEL 和 AGT_WORKSPACE，然后重启后端。</div>}
       <div className="conversation" aria-live="polite" aria-busy={busy} onScroll={event => { const node = event.currentTarget; followOutput.current = node.scrollHeight - node.scrollTop - node.clientHeight < 100; }}>

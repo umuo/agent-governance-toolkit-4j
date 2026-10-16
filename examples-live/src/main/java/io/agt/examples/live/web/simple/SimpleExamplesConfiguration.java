@@ -10,6 +10,7 @@ import io.agt.core.policy.ParameterRule;
 import io.agt.core.policy.StructuredPolicy;
 import io.agt.core.policy.ToolRule;
 import io.agt.examples.live.config.LocalEnvironment;
+import io.agt.examples.live.web.experiment.TraceHttpClientBuilder;
 import io.agt.langchain4j.spring.TrustedContextResolver;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -33,6 +34,7 @@ public class SimpleExamplesConfiguration {
             throw new IllegalStateException("请配置 LLM_API_KEY 和 LLM_MODEL");
         }
         return OpenAiChatModel.builder()
+                .httpClientBuilder(new TraceHttpClientBuilder())
                 .baseUrl(env.getOrDefault("LLM_BASE_URL", "https://api.openai.com/v1"))
                 .apiKey(env.get("LLM_API_KEY"))
                 .modelName(env.get("LLM_MODEL"))

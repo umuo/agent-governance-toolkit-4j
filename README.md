@@ -138,3 +138,5 @@ SDK 保护通过受控构建器或装饰器接入的路径；原始模型、业�
 java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar security asi02
 java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar security asi05
 ```
+
+真实 LLM 的 ASI05 网页对照见 [意外代码执行案例](docs/asi05-reproduction-cases.md)，包含固定脚本执行、OS 隔离、完整性、超时与审批的九类实验。

@@ -8,7 +8,7 @@ Spring Boot 后端通过 `agt-langchain4j-spring-boot-starter` 接入治理，�
 4. 另一个终端：`cd examples-live/frontend`，执行 `npm ci`、`npm run dev`。
 5. 浏览器打开 [Agent Lab](http://127.0.0.1:3000)。
 
-首页提供“原生 LangChain4j”“安全护栏入门”“ASI02 工具滥用”“完整 Agent”四个文件夹。建议先运行普通聊天、加法工具、输入拦截、输出脱敏和工具权限五个最简案例，并展开实际 Java 源码。入门案例只要求模型配置，不要求工作区；每次问答独立，无文件操作和审批。原有工作区实验台位于“完整 Agent”。
+首页提供“原生 LangChain4j”“安全护栏入门”“ASI02 工具滥用”“ASI05 意外代码执行”“完整 Agent”五个文件夹。建议先运行普通聊天、加法工具、输入拦截、输出脱敏和工具权限五个最简案例，并展开实际 Java 源码。入门案例只要求模型配置，不要求工作区；每次问答独立，无文件操作和审批。原有工作区实验台位于“完整 Agent”。
 
 “ASI02 工具滥用”包含十个可运行对照案例：批量删除、跨租户读取、邮件滥发、高成本调用、工具链外传、动作审批、工具结果注入、故障熔断、网络隔离与事后拦截。每轮分别运行原生 LangChain4j 与 Starter 防护路径，显示实际模型请求、工具候选调用、执行前后状态和审计。所有网页案例都使用后端配置的真实 API Key 请求 LLM，不提供固定响应或失败回退；若模型不触发工具，页面明确标注未触发。测试替身只在测试目录中使用。
 
@@ -19,3 +19,5 @@ Spring Boot 后端通过 `agt-langchain4j-spring-boot-starter` 接入治理，�
 终端模式仍可通过 `java -jar examples-live/target/agt-examples-live-0.6.0-SNAPSHOT.jar --cli` 使用，配置与工具说明见 [真实 LLM 指南](../docs/live-agent-guide.md)。
 
 Bash 的 `AGT_BASH_HOST_READS` 仅扩大读取范围，不解除写入、网络和审批限制；`~` 仍指向工作区。开启前请阅读 [完整能力边界与验证方法](../docs/live-agent-guide.md#agt_bash_host_reads)。
+
+“ASI05 意外代码执行”提供九个真实模型对照：执行权限、命令参数注入、越界写入、只读工作区、严格读取、执行环境禁网、程序完整性、运行超时和高风险执行审批。脚本全部由宿主固定，仅操作临时合成文件和本机接收器。当前原生探针验收 macOS，不可用时明确标注；不执行任意模型代码，也不宣称已验证容器逃逸防御。详见 [案例与能力边界](../docs/asi05-reproduction-cases.md)。

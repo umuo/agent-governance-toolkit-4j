@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ArrowUp, Code2, MessageSquare, ShieldCheck } from 'lucide-react';
+import { CollapsibleIntro } from '@/components/collapsible-intro';
 import { Markdown } from '@/components/markdown';
 
 export type Example = { id: string; folder: string; name: string; description: string; prompt: string; expected: string; source: string; guarded: boolean };
@@ -63,7 +64,7 @@ export function SimpleChat({ example, onBusyChange }: { example: Example; onBusy
   }
 
   return <main className="main simple-main">
-    <header className="header"><div><span className="eyebrow">{example.folder} / {example.name.slice(0, 2)}</span><h1>{example.name.slice(5)}</h1></div><span className={`example-tag ${example.guarded ? 'guarded' : ''}`}>{example.guarded ? <ShieldCheck size={14} /> : <MessageSquare size={14} />}{example.guarded ? 'AGT 护栏' : '原生 · 无 AGT 护栏'}</span></header>
+    <CollapsibleIntro eyebrow={`${example.folder} / ${example.name.slice(0, 2)}`} title={example.name.slice(5)} badge={<span className={`example-tag ${example.guarded ? 'guarded' : ''}`}>{example.guarded ? <ShieldCheck size={14} /> : <MessageSquare size={14} />}{example.guarded ? 'AGT 护栏' : '原生 · 无 AGT 护栏'}</span>}>
     <section className="lesson-intro">
       <p>{example.description}</p>
       <div className="lesson-actions"><button onClick={() => void send(example.prompt)} disabled={busy}>运行推荐提问 <span>↗</span></button><button onClick={() => setSourceOpen(previous => !previous)} aria-expanded={sourceOpen}><Code2 size={15} />{sourceOpen ? '收起代码' : '查看最简代码'}</button></div>
@@ -76,6 +77,7 @@ export function SimpleChat({ example, onBusyChange }: { example: Example; onBusy
         {source.configuration && <details><summary>共用规则与 Starter 配置 · SimpleExamplesConfiguration.java</summary><pre><code>{source.configuration}</code></pre></details>}
       </>}
     </section>}
+    </CollapsibleIntro>
     <div className="conversation simple-conversation" aria-live="polite" aria-busy={busy}>
       {!turns.length && <div className="simple-empty"><MessageSquare size={28} /><h2>一个案例，只看一个重点。</h2><p>运行推荐提问，或输入自己的问题。<br />每次请求独立，不携带之前的对话。</p></div>}
       {turns.map(turn => <article className="turn" key={turn.id}>

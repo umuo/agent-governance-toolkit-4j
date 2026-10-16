@@ -39,7 +39,10 @@ public class Asi02Controller {
                 "rules",
                 read("Rules.java"),
                 "runner",
-                read("Asi02Service.java"));
+                read("Asi02Service.java")
+                        + "\n"
+                        + new ClassPathResource("experiment-examples/ExperimentRunner.java")
+                                .getContentAsString(StandardCharsets.UTF_8));
     }
 
     private static String read(String file) throws IOException {

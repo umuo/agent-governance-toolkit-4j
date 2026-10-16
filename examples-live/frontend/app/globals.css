@@ -6,3 +6,65 @@
 
 /* ASI02 每轮独立的真实执行证据。 */
 .asi02-conversation{padding-top:15px}.comparison-turn{padding:0 0 24px}.comparison-question{font-size:12px;line-height:1.9;white-space:pre-wrap;padding:12px 15px;background:#edf1e8;border-radius:7px}.evidence-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}.evidence-card{border:1px solid #d8e1d2;border-radius:9px;background:#fafcf7;padding:15px;min-width:0}.evidence-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.evidence-heading h3{font-size:13px;margin:0}.evidence-heading>span{font-size:10px;color:#75866b}.evidence-card.blocked{border-color:#d9c9a4}.evidence-card.error,.evidence-card.unavailable{border-color:#d9b6a8}.evidence-count{font-size:10px;color:#7f8e75;line-height:1.7}.evidence-code{display:block;color:#99652f;font-size:11px;margin:10px 0;overflow-wrap:anywhere}.evidence-table{border-collapse:collapse;width:100%;font-size:10px;line-height:1.7;table-layout:fixed}.evidence-table caption{text-align:left;font-weight:600;padding:10px 0}.evidence-table td,.evidence-table th{padding:8px 5px;border-bottom:1px solid #e2e8dc;word-break:break-word;text-align:left;vertical-align:top}.evidence-table thead{color:#7d8a75}.evidence-table th{font-weight:500}.evidence-card details{font-size:11px;margin-top:13px}.evidence-card summary{cursor:pointer;padding:5px 0}.evidence-card pre{font-size:10px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere;max-height:300px;overflow:auto;padding:10px;background:#eaf0e2;border-radius:6px}.evidence-card .markdown{font-size:11px;margin-top:10px}.evidence-note,.asi02-caution{font-size:11px;line-height:1.8;color:#9b6d38}.asi02-composer-bottom{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;font-size:11px}.asi02-composer-bottom button,.asi02-composer-bottom select{padding:7px 9px;border:1px solid #d2ddc9;border-radius:5px;background:white;font-size:11px}.asi02-composer-bottom button[type=submit]{background:var(--green);color:white}.asi02-composer-bottom label{display:flex;align-items:center;gap:6px}.catalog-sidebar nav{padding-bottom:12px}.asi02-main .lesson-intro>small{font-size:10px}@media(max-width:1000px){.evidence-pair{grid-template-columns:1fr}}@media(max-width:720px){.evidence-card{padding:12px}.asi02-composer-bottom{gap:8px}.asi02-main .conversation{max-height:none}.catalog-sidebar{max-height:42dvh}.example-folder{min-width:145px}.comparison-question{font-size:11px}}
+
+.experiment-request{margin:0 0 14px;font-size:11px;min-width:0}.experiment-request summary{cursor:pointer;overflow-wrap:anywhere;line-height:1.8}.experiment-request pre{padding:12px;background:#eaf0e2;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:6px;font-size:11px;line-height:1.8}.evidence-card .experiment-trace{border:1px solid #d5dfcb;border-radius:7px;padding:9px 11px;background:#f0f5e9;margin:14px 0}.experiment-trace>summary{font-weight:600;color:var(--green)}.trace-explanation{font-size:10px;line-height:1.8;color:#68785c}.trace-actions{display:flex;gap:8px;flex-wrap:wrap}.trace-actions button{font-size:10px;padding:5px 8px;border:1px solid #cbd7c0;border-radius:4px;background:#fff;color:#385635;cursor:pointer}.trace-steps{list-style:none;padding:0;margin:10px 0 0;counter-reset:none}.trace-steps>li{border-top:1px solid #d9e2cf;padding:5px 0}.trace-steps summary{line-height:1.7}.trace-step-title{font-weight:600}.trace-step-time{display:block;font-size:10px;color:#7d8a75}.trace-steps summary small{display:block;font-size:10px;overflow-wrap:anywhere;color:#68785c}.evidence-card .trace-steps pre{max-height:460px;background:#fff;border:1px solid #e0e7d8;font-size:11px}.trace-steps pre:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+
+/* 将阅读空间交还给结果区；目录和说明独立收起，保留随时恢复的入口。 */
+.catalog-shell{max-width:none;min-height:0;overflow:hidden}
+.catalog-sidebar{min-height:0}
+.catalog-sidebar-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0;margin-bottom:18px}
+.catalog-sidebar-heading .brand{margin:0;font-size:23px;gap:8px}
+.catalog-sidebar-heading .brand-icon{width:35px;height:38px;border-radius:9px}
+.catalog-sidebar-body{display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto}
+.catalog-sidebar-body[hidden],.case-overview-body[hidden]{display:none}
+.sidebar-toggle,.overview-toggle{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex-shrink:0;min-width:34px;min-height:34px;border:1px solid #d3ddcd;background:#fff;border-radius:6px;color:var(--green)}
+.sidebar-toggle-label{display:none}
+.catalog-shell.sidebar-collapsed{grid-template-columns:54px minmax(0,1fr)}
+.sidebar-collapsed .catalog-sidebar{padding:14px 9px;overflow:visible}
+.sidebar-collapsed .catalog-sidebar-heading{justify-content:center;margin:0}
+.sidebar-collapsed .catalog-sidebar-heading .brand{display:none}
+.catalog-shell>.main,.catalog-shell>.advanced-shell{min-height:0;height:100%;max-height:100dvh;overflow:hidden}
+.catalog-shell .main{min-height:0;height:100%;max-height:100%;overflow:hidden}
+.case-overview{display:flex;flex-direction:column;max-height:55dvh;flex-shrink:0;min-height:0;background:#fafbf7;border-bottom:1px solid var(--line)}
+.case-overview>.header{padding:20px 28px;flex-shrink:0}
+.case-title{min-width:0}
+.case-heading-actions{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.overview-toggle{font-size:11px;padding:7px 9px}
+.case-overview-body{min-height:0;overflow:auto}
+.case-overview .lesson-intro{border-bottom:0;padding-top:0;padding-left:28px;padding-right:28px}
+.case-overview.is-collapsed>.header{padding-top:10px;padding-bottom:10px}
+.case-overview.is-collapsed .eyebrow,.case-overview.is-collapsed .case-badge{display:none}
+.case-overview.is-collapsed h1{margin:0;font-size:14px}
+.catalog-shell .main>.conversation{min-height:0;max-height:none;overflow-y:auto;flex:1;padding:16px 28px 0}
+.catalog-shell .composer-wrap{flex-shrink:0;padding-top:10px;padding-bottom:12px}
+.evidence-card pre,.evidence-card .trace-steps pre{max-height:none;font-size:12px;line-height:1.85;padding:15px}
+.evidence-card .markdown{font-size:13px}
+.evidence-card details{font-size:12px}
+@media(max-width:720px){
+  .catalog-shell,.catalog-shell.sidebar-collapsed{display:flex;flex-direction:column;height:100dvh;min-height:0;overflow:hidden}
+  .catalog-sidebar{max-height:34dvh;padding:10px 14px;flex-shrink:0;overflow:hidden}
+  .catalog-sidebar-heading{margin-bottom:9px}
+  .catalog-sidebar-heading .brand{font-size:19px}
+  .catalog-sidebar-heading .brand-icon{width:29px;height:31px}
+  .sidebar-toggle{padding:5px 8px;min-height:32px}
+  .sidebar-toggle-label{display:inline;font-size:11px}
+  .sidebar-collapsed .catalog-sidebar{padding:7px 14px;border-bottom:1px solid var(--line);overflow:hidden}
+  .sidebar-collapsed .catalog-sidebar-heading{justify-content:flex-start}
+  .catalog-shell>.main,.catalog-shell>.advanced-shell{flex:1;height:auto;min-height:0;max-height:none;overflow:hidden}
+  .catalog-shell .advanced-shell>.main{height:100%}
+  .case-overview{max-height:42dvh}
+  .case-overview>.header{padding:13px 16px;gap:8px;align-items:flex-start}
+  .case-heading-actions{gap:6px;flex-direction:column;align-items:flex-end}
+  .case-overview.is-collapsed>.header{align-items:center}
+  .case-overview.is-collapsed .case-heading-actions{flex-direction:row}
+  .case-overview .lesson-intro{padding-left:16px;padding-right:16px;padding-bottom:12px}
+  .case-overview .source-panel{padding:12px 16px;max-height:none}
+  .case-overview .header h1{font-size:14px}
+  .overview-toggle{font-size:10px;padding:5px 7px;min-height:30px}
+  .catalog-shell .main>.conversation{padding:12px 14px 0;min-height:0;max-height:none}
+  .catalog-shell .composer-wrap{padding:8px 12px 10px}
+  .catalog-shell .composer{padding:10px 12px 8px}
+  .catalog-shell .composer textarea{min-height:36px;max-height:110px}
+  .catalog-shell .composer-hint{padding-top:7px}
+  .evidence-card pre,.evidence-card .trace-steps pre{padding:11px;font-size:12px}
+}

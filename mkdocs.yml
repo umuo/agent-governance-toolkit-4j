@@ -14,6 +14,7 @@ nav:
       - ASI02 与 ASI05 场景教学: security-demos.md
       - 真实 LLM 通用 Agent: live-agent-guide.md
       - Web Agent 实验台: web-agent-guide.md
+      - ASI05 网页对照案例: asi05-reproduction-cases.md
   - 需求与架构:
       - 架构与扩展: architecture.md
       - 关键类与调用机制: key-classes.md

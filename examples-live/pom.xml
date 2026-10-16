@@ -56,6 +56,16 @@
         <targetPath>asi02-examples</targetPath>
         <includes><include>*.java</include></includes>
       </resource>
+      <resource>
+        <directory>src/main/java/io/agt/examples/live/web/asi05</directory>
+        <targetPath>asi05-examples</targetPath>
+        <includes><include>*.java</include></includes>
+      </resource>
+      <resource>
+        <directory>src/main/java/io/agt/examples/live/web/experiment</directory>
+        <targetPath>experiment-examples</targetPath>
+        <includes><include>*.java</include></includes>
+      </resource>
     </resources>
     <plugins>
       <plugin>
