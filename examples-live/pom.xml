@@ -51,6 +51,11 @@
         <targetPath>simple-examples</targetPath>
         <includes><include>*.java</include></includes>
       </resource>
+      <resource>
+        <directory>src/main/java/io/agt/examples/live/web/asi02</directory>
+        <targetPath>asi02-examples</targetPath>
+        <includes><include>*.java</include></includes>
+      </resource>
     </resources>
     <plugins>
       <plugin>

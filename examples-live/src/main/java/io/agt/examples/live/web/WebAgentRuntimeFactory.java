@@ -26,7 +26,7 @@ public final class WebAgentRuntimeFactory {
         this.environment = environment;
     }
 
-    Runtime open(
+    public Runtime open(
             PolicyEvaluator policy,
             TrustedContext identity,
             AuditSink audit,
@@ -57,7 +57,7 @@ public final class WebAgentRuntimeFactory {
         }
     }
 
-    record Runtime(
+    public record Runtime(
             AnnotationConfigApplicationContext context,
             AgentControl control,
             GovernedAiServices services,
