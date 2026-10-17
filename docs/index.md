@@ -22,3 +22,5 @@ flowchart LR
 ```
 
 完整的 [OWASP 十大 Agent 风险实验目录](top10-live-cases.md) 已包含 43 个真实模型对照案例，沿用统一配置与完整调用过程展示。
+
+多 Agent 场景可阅读 [Agent 执行链路](agent-tracing.md)，包括身份与 run 区分、并行传播、审计关联及本机可视化。

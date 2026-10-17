@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-17",
+  "traceId": "3c0a2e1768fd982354bf457ad8a27d80",
+  "status": "completed",
+  "spanCount": 10,
+  "payloadCounts": {
+    "agent_request": 3,
+    "agent_response": 3,
+    "model_request": 3,
+    "http_request": 3,
+    "http_response": 3,
+    "model_response": 3,
+    "tool_request": 2,
+    "tool_response": 2,
+    "tool_effective_arguments": 1
+  },
+  "deniedTool": {
+    "code": "tool_arguments_denied",
+    "status": "blocked",
+    "executed": false
+  },
+  "successfulTool": {
+    "status": "completed",
+    "result": "本期营收增长 5%，新增客户 12 家。",
+    "executed": true
+  },
+  "effects": {
+    "factReads": 1
+  },
+  "verification": {
+    "maven": {
+      "tests": 491,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 1
+    },
+    "frontendTests": 15,
+    "productionBuild": "passed",
+    "browser": [
+      "HTTP request body dialog opens and closes with Escape",
+      "denied tool payload displays executed=false",
+      "legacy history remains readable and explicitly says bodies were not collected"
+    ]
+  }
+}

@@ -210,7 +210,7 @@ class Asi02WebTest {
                                 .header("Origin", "https://invalid.example")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"message\":\"delete\",\"approval\":\"allow\"}"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isOk());
         mvc.perform(get("/api/examples/asi02/missing/source")).andExpect(status().isNotFound());
     }
 

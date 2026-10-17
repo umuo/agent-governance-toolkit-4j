@@ -1,0 +1,28 @@
+{
+  "date": "2026-10-17",
+  "scope": "All examples-live API families; no Origin allowlist; shared CORS and frontend proxy preflight forwarding",
+  "tests": {
+    "javaTotal": 488,
+    "javaPassed": 487,
+    "javaSkipped": 1,
+    "frontendPassed": 15,
+    "productionBuild": "passed"
+  },
+  "liveChecks": {
+    "ports": [
+      8081,
+      3001
+    ],
+    "origins": [
+      "http://localhost:3001",
+      "https://any.example",
+      "null"
+    ],
+    "allPreflights": 200,
+    "credentialsAllowed": true,
+    "launchViaFrontendProxy": 202,
+    "launchOrigin": "https://any.example",
+    "traceId": "94269bb18e6620fd77456c334c1ece43"
+  },
+  "note": "Supersedes earlier origin-rejection behavior recorded in historical verification files. Tool permissions, approvals, sandbox rules and concurrency limits are unchanged."
+}

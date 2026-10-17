@@ -10,7 +10,22 @@ describe('SSE protocol', () => {
     assert.deepEqual(events.map(event => event.type), ['text_delta', 'done']);
     assert.equal(events[0].data.text, '你好');
   });
-  it('rejects malformed events', async () => {
+  it('receives a cancellation terminal event and closes normally without aborting the body', async () => {
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('data: {"type":"cancelled","data":{"runId":"test-run"}}\n\n'));
+        controller.close();
+      },
+      cancel() { cancelled = true; },
+    });
+    const events: AgentEvent[] = [];
+    await consumeEvents(stream, event => events.push(event));
+    assert.equal(events[0].type, 'cancelled');
+    assert.equal(cancelled, false);
+    assert.equal(stream.locked, false);
+  });
+  it('rejects malformed events' , async () => {
     const stream = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new TextEncoder().encode('data: {}\n\n')); controller.close(); } });
     await assert.rejects(consumeEvents(stream, () => {}), /无效/);
   });

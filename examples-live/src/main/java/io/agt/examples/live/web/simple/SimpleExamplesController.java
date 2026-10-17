@@ -8,7 +8,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -82,15 +81,10 @@ public class SimpleExamplesController {
 
     private final ObjectProvider<ChatModel> models;
     private final GovernedAiServices services;
-    private final String frontendOrigin;
 
-    public SimpleExamplesController(
-            ObjectProvider<ChatModel> models,
-            GovernedAiServices services,
-            @Value("${agt.examples.frontend-origin:http://127.0.0.1:3000}") String frontendOrigin) {
+    public SimpleExamplesController(ObjectProvider<ChatModel> models, GovernedAiServices services) {
         this.models = models;
         this.services = services;
-        this.frontendOrigin = frontendOrigin;
     }
 
     @GetMapping
@@ -113,21 +107,9 @@ public class SimpleExamplesController {
     }
 
     @PostMapping("/{id}/chat")
-    public ChatResult chat(
-            @PathVariable String id,
-            @RequestBody ChatInput input,
-            @RequestHeader(value = "Origin", required = false) String origin) {
+    public ChatResult chat(@PathVariable String id, @RequestBody ChatInput input) {
         example(id);
-        if (origin != null
-                && !origin.equals(frontendOrigin)
-                && !List.of(
-                                "http://localhost:3000",
-                                "http://127.0.0.1:3000",
-                                "http://localhost:8080",
-                                "http://127.0.0.1:8080")
-                        .contains(origin)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "origin_denied");
-        }
+
         if (input.message() == null
                 || input.message().isBlank()
                 || input.message().length() > 16000) {

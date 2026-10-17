@@ -23,6 +23,7 @@ import org.springframework.context.annotation.*;
 
 /** 真实 Spring HTTP、官方 Provider SSE、本地文件副作用和浏览器动作审批集成测试。 */
 @SpringBootTest(
+        properties = "agt.examples.frontend-origin=http://127.0.0.1:3001",
         classes = {AgentApplication.class, AgentWebTest.Configuration.class},
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class AgentWebTest {
@@ -273,7 +274,7 @@ class AgentWebTest {
                                 .POST(HttpRequest.BodyPublishers.noBody())
                                 .build(),
                         HttpResponse.BodyHandlers.ofString());
-        assertEquals(403, response.statusCode());
+        assertEquals(200, response.statusCode());
     }
 
     @Test
@@ -292,6 +293,26 @@ class AgentWebTest {
             }
         }
         assertTrue(checked >= 0 && result > checked);
+    }
+
+    @Test
+    void allOriginsCanCancel() throws Exception {
+        var allowed =
+                client.send(
+                        request("/cancel")
+                                .header("Origin", "http://127.0.0.1:3001")
+                                .POST(HttpRequest.BodyPublishers.noBody())
+                                .build(),
+                        HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, allowed.statusCode());
+        var denied =
+                client.send(
+                        request("/cancel")
+                                .header("Origin", "https://foreign.example")
+                                .POST(HttpRequest.BodyPublishers.noBody())
+                                .build(),
+                        HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, denied.statusCode());
     }
 
     @Test
@@ -318,6 +339,8 @@ class AgentWebTest {
                             }
                         });
         assertTrue(cancelled.get());
+        assertTrue(has(events, "cancelled"));
+        assertFalse(has(events, "error"));
         assertFalse(has(events, "done"));
         assertTrue(has(chat("write", "agent", "strict", ignored -> {}), "done"));
     }

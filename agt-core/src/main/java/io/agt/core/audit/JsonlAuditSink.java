@@ -63,6 +63,9 @@ public final class JsonlAuditSink implements AuditSink {
                 row.put("dataOperation", r.dataOperation());
                 row.put("resourceIdentity", r.resourceIdentity());
             }
+            if (r.schemaVersion() >= 3 && r.execution() != null) {
+                row.put("execution", r.execution());
+            }
             writer.write(mapper.writeValueAsString(row));
             writer.newLine();
             writer.flush();

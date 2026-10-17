@@ -227,7 +227,7 @@ class RiskWebTest {
                                 .header("Origin", "https://invalid.example")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"message\":\"attack\",\"approval\":\"allow\"}"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isOk());
         mvc.perform(
                         post("/api/examples/asi03/artifact-replacement/run")
                                 .contentType(MediaType.APPLICATION_JSON)

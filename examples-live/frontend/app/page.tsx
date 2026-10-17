@@ -8,6 +8,8 @@ import { Asi02Chat, type CaseEntry } from '@/components/asi02-chat';
 
 type RiskCategory = { id: string; name: string; englishName: string; description: string; cases: CaseEntry[] };
 
+const AgentTraceViewer = dynamic(() => import('@/components/agent-trace-viewer').then(module => module.AgentTraceViewer));
+
 const AdvancedChat = dynamic(() => import('@/components/advanced-chat').then(module => module.AdvancedChat), {
   loading: () => <main className="catalog-loading">正在打开完整 Agent…</main>,
 });
@@ -51,12 +53,13 @@ export default function Page() {
           <summary title={`${risk.englishName} · ${risk.description}`}><ChevronRight size={14} className="folder-chevron" /><ShieldCheck size={16} />{risk.name}<span className="case-count">{risk.cases.length}</span></summary>
           <div className="folder-cases">{risk.cases.map(item => <button key={item.id} disabled={busy} aria-current={selected === `${risk.id}:${item.id}` ? 'page' : undefined} onClick={() => setSelected(`${risk.id}:${item.id}`)}><MessageSquare size={14} />{item.name}</button>)}</div>
         </details>)}
+        <details className="example-folder"><summary><ChevronRight size={14} className="folder-chevron" /><ShieldCheck size={16} />多 Agent 执行链路</summary><div className="folder-cases"><button disabled={busy} aria-current={selected === 'tracing' ? 'page' : undefined} onClick={() => setSelected('tracing')}><MessageSquare size={14} />父子 Agent 追踪</button></div></details>
         <details className="example-folder"><summary><ChevronRight size={14} className="folder-chevron" /><FolderOpen size={16} />完整 Agent</summary><div className="folder-cases"><button disabled={busy} aria-current={selected === 'advanced' ? 'page' : undefined} onClick={() => setSelected('advanced')}><MessageSquare size={14} />工作区实验台</button></div></details>
       </nav>
       <p className="catalog-foot">入门案例每次独立问答。<br />文件、审批与运行观察在完整 Agent 中。</p>
       </div>
     </aside>
-    {selected === 'advanced' ? <AdvancedChat onBusyChange={setBusy} /> : activeCase && activeRisk ? <Asi02Chat key={`${activeRisk.id}:${activeCase.id}`} category={activeRisk.id} categoryTitle={activeRisk.name} entry={activeCase} onBusyChange={setBusy} /> : example
+    {selected === 'tracing' ? <AgentTraceViewer /> : selected === 'advanced' ? <AdvancedChat onBusyChange={setBusy} /> : activeCase && activeRisk ? <Asi02Chat key={`${activeRisk.id}:${activeCase.id}`} category={activeRisk.id} categoryTitle={activeRisk.name} entry={activeCase} onBusyChange={setBusy} /> : example
       ? <SimpleChat key={example.id} example={example} onBusyChange={setBusy} />
       : <main className="catalog-loading" role="status">{error || '正在加载案例…'}{error && <button onClick={() => window.location.reload()}>重新加载</button>}</main>}
   </div>;

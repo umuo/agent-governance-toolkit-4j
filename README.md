@@ -142,3 +142,5 @@ java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar security asi05
 真实 LLM 的 ASI05 网页对照见 [意外代码执行案例](docs/asi05-reproduction-cases.md)，包含固定脚本执行、OS 隔离、完整性、超时与审批的九类实验。
 
 真实模型的 ASI01–ASI10 共 43 个网页安全对照见 [十大风险完整实验目录](docs/top10-live-cases.md)，可查看完整请求、响应、工具状态和各类防护边界。
+
+多 Agent 父子执行、OpenTelemetry 链路与可视化见 [Agent 执行链路](docs/agent-tracing.md)。

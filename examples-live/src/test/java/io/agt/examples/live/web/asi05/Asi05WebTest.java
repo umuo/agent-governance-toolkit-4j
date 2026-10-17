@@ -224,7 +224,7 @@ class Asi05WebTest {
                                 .header("Origin", "https://invalid.example")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"message\":\"run\",\"approval\":\"allow\"}"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isOk());
     }
 
     private Asi05Service.Comparison compare(String id, String approval) {

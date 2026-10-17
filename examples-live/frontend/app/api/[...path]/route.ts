@@ -3,21 +3,21 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 async function proxy(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
-  if (!['agent', 'examples'].includes(path[0]) || path.some(part => part === '..' || !/^[a-zA-Z0-9-]+$/.test(part))) {
+  if (!['agent', 'examples', 'agent-traces'].includes(path[0]) || path.some(part => part === '..' || !/^[a-zA-Z0-9-]+$/.test(part))) {
     return Response.json({ message: 'Unknown API' }, { status: 404 });
   }
   const headers = new Headers();
-  for (const name of ['content-type', 'cookie', 'origin']) {
+  for (const name of ['content-type', 'cookie', 'origin', 'access-control-request-method', 'access-control-request-headers']) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
   try {
     const upstream = await fetch(`${process.env.AGT_API_URL || 'http://127.0.0.1:8080'}/api/${path.join('/')}`, {
       method: request.method, headers, cache: 'no-store', signal: request.signal,
-      body: ['GET', 'HEAD'].includes(request.method) ? undefined : await request.text(),
+      body: ['GET', 'HEAD', 'OPTIONS'].includes(request.method) ? undefined : await request.text(),
     });
     const responseHeaders = new Headers({ 'Cache-Control': 'no-cache, no-transform', 'X-Accel-Buffering': 'no' });
-    for (const name of ['content-type', 'set-cookie']) {
+    for (const name of ['content-type', 'set-cookie', 'access-control-allow-origin', 'access-control-allow-credentials', 'access-control-allow-methods', 'access-control-allow-headers', 'access-control-max-age', 'vary']) {
       const value = upstream.headers.get(name);
       if (value) responseHeaders.set(name, value);
     }
@@ -29,3 +29,5 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
 export const GET = proxy;
 export const POST = proxy;
 export const DELETE = proxy;
+
+export const OPTIONS = proxy;

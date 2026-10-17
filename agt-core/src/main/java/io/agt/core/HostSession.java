@@ -36,6 +36,7 @@ import java.util.function.Supplier;
 public final class HostSession implements AutoCloseable {
     private final AgentControl control;
     private final TrustedContext context;
+    private final ExecutionContext execution;
     private final String id = UUID.randomUUID().toString();
     private final long started = System.nanoTime();
     private final HostSession previous;
@@ -78,6 +79,16 @@ public final class HostSession implements AutoCloseable {
 
     HostSession(
             AgentControl control, TrustedContext context, HostSession previous, boolean detached) {
+        this(control, context, previous, detached, null);
+    }
+
+    HostSession(
+            AgentControl control,
+            TrustedContext context,
+            HostSession previous,
+            boolean detached,
+            ExecutionContext execution) {
+        this.execution = execution;
         this.detached = detached;
         this.control = control;
         this.context = context;
@@ -86,6 +97,10 @@ public final class HostSession implements AutoCloseable {
 
     public String sessionId() {
         return id;
+    }
+
+    public ExecutionContext execution() {
+        return execution;
     }
 
     public TrustedContext context() {
@@ -906,7 +921,7 @@ public final class HostSession implements AutoCloseable {
         try {
             control.emit(
                     new AuditRecord(
-                            dataPoint ? 2 : 1,
+                            execution != null ? 3 : dataPoint ? 2 : 1,
                             Instant.now(),
                             id,
                             context.agentId(),
@@ -924,7 +939,8 @@ public final class HostSession implements AutoCloseable {
                             nanos,
                             warnings,
                             info == null ? null : info.operation(),
-                            info == null ? null : info.resourceIdentity()));
+                            info == null ? null : info.resourceIdentity(),
+                            execution));
         } catch (GovernanceException e) {
             throw refuse(e.code());
         } finally {

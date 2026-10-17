@@ -364,6 +364,11 @@ public final class WebAgentService {
         } finally {
             if (run.cancelled.get()) {
                 conversation.memory.clear();
+                try {
+                    events.send("cancelled", Map.of("runId", run.id));
+                } catch (RuntimeException disconnected) {
+                    // 连接已断开时仍继续释放会话，不让取消结果覆盖清理。
+                }
             }
             run.approvals
                     .values()

@@ -96,7 +96,7 @@ class SimpleExamplesTest {
     }
 
     @Test
-    void invalidIdsMessagesAndOriginsDoNotCallModel() throws Exception {
+    void invalidInputsStayRejectedAndArbitraryOriginsAreAccepted() throws Exception {
         chat("missing", "hello").andExpect(status().isNotFound());
         chat("plain-chat", " ").andExpect(status().isBadRequest());
         chat("plain-chat", "x".repeat(16001)).andExpect(status().isBadRequest());
@@ -105,8 +105,8 @@ class SimpleExamplesTest {
                                 .header("Origin", "https://example.invalid")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"message\":\"hello\"}"))
-                .andExpect(status().isForbidden());
-        assertEquals(0, model.calls.get());
+                .andExpect(status().isOk());
+        assertEquals(1, model.calls.get());
     }
 
     @Test

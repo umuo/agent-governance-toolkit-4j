@@ -123,7 +123,7 @@ public final class AgentControl implements AutoCloseable {
     }
 
     public HostSession openSession(TrustedContext context) {
-        return createSession(context, false);
+        return createSession(context, false, null);
     }
 
     /**
@@ -133,16 +133,26 @@ public final class AgentControl implements AutoCloseable {
      * @return 独立绑定的宿主会话
      */
     public HostSession openDetachedSession(TrustedContext context) {
-        return createSession(context, true);
+        return createSession(context, true, null);
     }
 
-    private HostSession createSession(TrustedContext context, boolean detached) {
+    public HostSession openSession(TrustedContext context, ExecutionContext execution) {
+        return createSession(context, false, Objects.requireNonNull(execution));
+    }
+
+    public HostSession openDetachedSession(TrustedContext context, ExecutionContext execution) {
+        return createSession(context, true, Objects.requireNonNull(execution));
+    }
+
+    private HostSession createSession(
+            TrustedContext context, boolean detached, ExecutionContext execution) {
         Objects.requireNonNull(context);
         checkRuntime();
         requirePoints(
                 EnumSet.of(InterventionPoint.AGENT_STARTUP, InterventionPoint.AGENT_SHUTDOWN));
         HostSession session =
-                new HostSession(this, context, detached ? null : current.get(), detached);
+                new HostSession(
+                        this, context, detached ? null : current.get(), detached, execution);
         sessions.add(session);
         try {
             session.evaluate(InterventionPoint.AGENT_STARTUP, "startup", null, Map.of());

@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /** 同源网页对话、取消及动作绑定审批 API。 */
@@ -61,7 +60,6 @@ public class AgentController {
     @PostMapping(value = "/chat", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter chat(
             @RequestBody ChatInput input, HttpSession session, HttpServletRequest request) {
-        checkOrigin(request);
         return service.chat(
                 session.getId(),
                 input.message(),
@@ -75,35 +73,19 @@ public class AgentController {
             @RequestBody ApprovalInput input,
             HttpSession session,
             HttpServletRequest request) {
-        checkOrigin(request);
         service.approve(session.getId(), id, input.approved());
         return Map.of("ok", true);
     }
 
     @PostMapping("/cancel")
     public Map<String, Boolean> cancel(HttpSession session, HttpServletRequest request) {
-        checkOrigin(request);
         service.cancel(session.getId());
         return Map.of("ok", true);
     }
 
     @DeleteMapping("/session")
     public Map<String, Boolean> clear(HttpSession session, HttpServletRequest request) {
-        checkOrigin(request);
         service.clear(session.getId());
         return Map.of("ok", true);
-    }
-
-    private void checkOrigin(HttpServletRequest request) {
-        String origin = request.getHeader("Origin");
-        if (origin != null
-                && !List.of(
-                                "http://localhost:3000",
-                                "http://127.0.0.1:3000",
-                                "http://localhost:8080",
-                                "http://127.0.0.1:8080")
-                        .contains(origin)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "origin_denied");
-        }
     }
 }

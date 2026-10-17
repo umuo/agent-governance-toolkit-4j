@@ -1,0 +1,23 @@
+{
+  "date": "2026-10-17",
+  "targetedJavaPassed": 22,
+  "frontendPassed": 15,
+  "typecheck": "passed",
+  "productionBuild": "passed",
+  "browserChecks": [
+    "Configured 3001 origin accepted for full Agent chat",
+    "Real streaming reply stopped through cancelled terminal event; composer restored",
+    "Multi-agent launch accepted: traceId 964d83d52000f177c4f3e097fda0b848"
+  ],
+  "diagnostics": "Previous generic launch failure was not reproduced: live backend returned 202 and a concurrent launch returned 429. A separate origin bug was reproduced on full Agent chat and fixed.",
+  "startupFailureCoverage": [
+    "Missing model returns specific code and releases busy flag",
+    "Full store preserves history and returns specific code",
+    "Foreign origin remains denied"
+  ],
+  "stopSemantics": [
+    "No AbortController.abort in stop or component cleanup",
+    "Wait for chat acceptance before cancellation",
+    "Wait for cancellation response and stream completion before next run"
+  ]
+}

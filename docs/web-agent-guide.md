@@ -19,7 +19,7 @@
 
 简单案例只需要 `LLM_API_KEY`、`LLM_MODEL` 与可选 `LLM_BASE_URL`，不要求工作区配置。原始案例不使用 AGT 护栏。共用运行时的审计为显式空实现，便于聚焦最小接入；需要完整审计时使用工作区实验台。
 
-前端使用非默认端口时，可通过 Spring 属性 `agt.examples.frontend-origin` 配置允许的完整来源（默认 `http://127.0.0.1:3000`，也接受本机 3000/8080 的常用 localhost 来源）。
+示例 API 允许任意 Origin，统一支持跨域预检；前端使用非默认端口无需再配置 `agt.examples.frontend-origin`。前端代理仍需通过 `AGT_API_URL` 指向实际运行的后端。
 
 接口为 `GET /api/examples`（目录）、`GET /api/examples/{id}/source`（实际源码）、`POST /api/examples/{id}/chat`（`{"message":"..."}`）。对话返回 `status, answer, code`；`status=blocked` 表示本次护栏拒绝，下次请求会使用新会话。未知 ID 返回 404，空白或超长输入返回 400；Provider 失败返回 502 且不回传原始异常。页面只保留本地展示记录，切换案例会清空该展示。
 

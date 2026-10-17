@@ -300,9 +300,16 @@ class NativeStreamingCompatibilityTest {
         var source = new AtomicReference<StreamingChatResponseHandler>();
         var ready = new CountDownLatch(1);
         var records = NativeIntegrationTest.audit();
+        var closed = new CountDownLatch(1);
         try (var control =
                 AgentControl.builder(NativeIntegrationTest.policy().build())
-                        .audit(records::add)
+                        .audit(
+                                record -> {
+                                    records.add(record);
+                                    if (record.point()
+                                            == io.agt.core.InterventionPoint.AGENT_SHUTDOWN)
+                                        closed.countDown();
+                                })
                         .build()) {
             var service =
                     new LangChain4jGovernance(control)
@@ -324,6 +331,7 @@ class NativeStreamingCompatibilityTest {
             source.get().onPartialResponse("late");
             source.get().onCompleteResponse(LangChain4jGovernanceTest.text("late"));
             assertTrue(sub.values.isEmpty());
+            assertTrue(closed.await(5, TimeUnit.SECONDS));
             assertEquals(1, NativeIntegrationTest.shutdowns(records));
         }
     }

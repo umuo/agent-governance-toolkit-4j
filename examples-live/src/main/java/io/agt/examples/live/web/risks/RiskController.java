@@ -5,7 +5,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -20,13 +19,9 @@ public final class RiskController {
     public record Input(String message, String approval) {}
 
     private final RiskService service;
-    private final String frontendOrigin;
 
-    public RiskController(
-            RiskService service,
-            @Value("${agt.examples.frontend-origin:http://127.0.0.1:3000}") String frontendOrigin) {
+    public RiskController(RiskService service) {
         this.service = service;
-        this.frontendOrigin = frontendOrigin;
     }
 
     @GetMapping("/risks")
@@ -62,20 +57,9 @@ public final class RiskController {
 
     @PostMapping("/" + RISK + "/{id}/run")
     public ExperimentRunner.Comparison run(
-            @PathVariable String risk,
-            @PathVariable String id,
-            @RequestBody Input input,
-            @RequestHeader(value = "Origin", required = false) String origin) {
+            @PathVariable String risk, @PathVariable String id, @RequestBody Input input) {
         RiskCatalog.entry(risk, id);
-        if (origin != null
-                && !origin.equals(frontendOrigin)
-                && !List.of(
-                                "http://localhost:3000",
-                                "http://127.0.0.1:3000",
-                                "http://localhost:8080",
-                                "http://127.0.0.1:8080")
-                        .contains(origin))
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "origin_denied");
+
         if (input.message() == null
                 || input.message().isBlank()
                 || input.message().length() > 16000

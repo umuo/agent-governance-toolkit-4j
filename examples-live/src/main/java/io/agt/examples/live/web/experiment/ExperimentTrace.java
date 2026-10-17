@@ -36,12 +36,7 @@ public final class ExperimentTrace {
     }
 
     public synchronized void add(String kind, Object body) {
-        JsonNode snapshot;
-        try {
-            snapshot = JSON.valueToTree(body);
-        } catch (IllegalArgumentException error) {
-            snapshot = JSON.valueToTree(Map.of("captureError", "unsupported_trace_value"));
-        }
+        JsonNode snapshot = snapshotOf(body);
         steps.add(
                 new Step(
                         steps.size() + 1,
@@ -49,6 +44,17 @@ public final class ExperimentTrace {
                         round,
                         kind,
                         snapshot));
+    }
+
+    /** 仅序列化显式消息 DTO，不传入模型客户端、请求头或宿主配置。 */
+    public static JsonNode snapshotOf(Object body) {
+        JsonNode snapshot;
+        try {
+            snapshot = JSON.valueToTree(body);
+        } catch (IllegalArgumentException error) {
+            snapshot = JSON.valueToTree(Map.of("captureError", "unsupported_trace_value"));
+        }
+        return snapshot;
     }
 
     public void httpBody(String kind, String body) {

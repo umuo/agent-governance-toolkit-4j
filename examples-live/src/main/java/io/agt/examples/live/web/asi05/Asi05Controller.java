@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -17,13 +16,9 @@ public class Asi05Controller {
     public record RunInput(String message, String approval) {}
 
     private final Asi05Service service;
-    private final String frontendOrigin;
 
-    public Asi05Controller(
-            Asi05Service service,
-            @Value("${agt.examples.frontend-origin:http://127.0.0.1:3000}") String frontendOrigin) {
+    public Asi05Controller(Asi05Service service) {
         this.service = service;
-        this.frontendOrigin = frontendOrigin;
     }
 
     @GetMapping
@@ -51,21 +46,9 @@ public class Asi05Controller {
     }
 
     @PostMapping("/{id}/run")
-    public Asi05Service.Comparison run(
-            @PathVariable String id,
-            @RequestBody RunInput input,
-            @RequestHeader(value = "Origin", required = false) String origin) {
+    public Asi05Service.Comparison run(@PathVariable String id, @RequestBody RunInput input) {
         Asi05Catalog.entry(id);
-        if (origin != null
-                && !origin.equals(frontendOrigin)
-                && !List.of(
-                                "http://localhost:3000",
-                                "http://127.0.0.1:3000",
-                                "http://localhost:8080",
-                                "http://127.0.0.1:8080")
-                        .contains(origin)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "origin_denied");
-        }
+
         if (input.message() == null
                 || input.message().isBlank()
                 || input.message().length() > 16000

@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-17",
+  "branch": "codex/agent-execution-tracing",
+  "tests": {
+    "javaTotal": 479,
+    "javaPassed": 478,
+    "javaSkipped": 1,
+    "newTracingTestsPassed": 8,
+    "frontendPassed": 13,
+    "frontendTypecheck": "passed",
+    "frontendProductionBuild": "passed",
+    "finalTargetedRegression": "passed"
+  },
+  "realModel": {
+    "orchestration": "fixed parent workflow, two real LLM children",
+    "traceId": "34e7cd69b6b9fc5993191a9cbe73e1d4",
+    "status": "completed",
+    "agentCount": 3,
+    "spanCount": 10,
+    "modelRequests": 3,
+    "auditCount": 23,
+    "parallelChildren": true,
+    "parentRunIdsMatch": true,
+    "factReads": 1,
+    "actualDeliveries": 0,
+    "toolDenial": "tool_arguments_denied",
+    "recoveredAfterBackendRestart": true
+  },
+  "browserChecks": [
+    "live span tree while running",
+    "completed parallel child branches and model/tool nodes",
+    "selected tool shows pre_tool_call DENY and refused-before-execution audit",
+    "mobile scrolling and collapsed sidebar/intro"
+  ],
+  "limits": [
+    "single-process local example store",
+    "parent orchestration is fixed, not model planning",
+    "W3C cross-process propagation tested with SDK contexts; no two-service deployment claim",
+    "no trace payloads, raw model messages, credentials or provider URLs persisted"
+  ]
+}
