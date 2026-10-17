@@ -3,21 +3,23 @@
 import { useEffect, useRef, useState } from 'react';
 import { Code2, Play, ShieldCheck } from 'lucide-react';
 import { Markdown } from '@/components/markdown';
+import { SourceDialog } from '@/components/source-dialog';
 import { CollapsibleIntro } from '@/components/collapsible-intro';
 import { ExperimentTrace } from '@/components/experiment-trace';
 import { observationLabel as asi02Label, type Observation } from '@/lib/asi02';
+import { observationLabel as riskLabel } from '@/lib/risks';
 import { observationLabel as asi05Label } from '@/lib/asi05';
 
 export type CaseEntry = { id: string; name: string; description: string; prompt: string; expected: string; source: string; note: string; approval: boolean };
 type Comparison = { caseId: string; approval: string; original: Observation; guarded: Observation };
 type Source = { code: string; rules: string; runner: string };
 type Turn = { id: string; question: string; request: { path: string; body: { message: string; approval: string } }; result?: Comparison; error?: string };
-const metricLabels: Record<string, string> = { toolEntered: '工具体进入次数', remainingCustomers: '剩余客户', readResult: '文档读取结果', sentMessages: '已发送邮件', outbox: '模拟发件箱', simulatedCredits: '模拟积分消耗', noteReads: '内部便签读取次数', externalMessages: '外传消息数', externalInbox: '外部模拟接收器', ledgerEntries: '付款记账条数', ledger: '模拟账本', ticketReads: '工单读取次数', serviceRequests: '服务实际访问次数', circuitOpen: '熔断是否打开', receiverRequests: '接收器实际请求数', fileContent: '临时文件内容', executionAttempts: '命令执行尝试', completedExecutions: '命令完成次数', outsideContent: '工作区外合成文件', workspaceContent: '工作区报告内容', capturedOutput: '命令返回内容', deadlineExceeded: '触发运行期限', backendQuarantined: '后端已拒绝复用' };
+const metricLabels: Record<string, string> = { toolEntered: '工具体进入次数', remainingCustomers: '剩余客户', readResult: '文档读取结果', sentMessages: '已发送邮件', outbox: '模拟发件箱', simulatedCredits: '模拟积分消耗', noteReads: '内部便签读取次数', externalMessages: '外传消息数', externalInbox: '外部模拟接收器', ledgerEntries: '付款记账条数', ledger: '模拟账本', ticketReads: '工单读取次数', serviceRequests: '服务实际访问次数', circuitOpen: '熔断是否打开', receiverRequests: '接收器实际请求数', fileContent: '临时文件内容', executionAttempts: '命令执行尝试', completedExecutions: '命令完成次数', outsideContent: '工作区外合成文件', workspaceContent: '工作区报告内容', capturedOutput: '命令返回内容', deadlineExceeded: '触发运行期限', backendQuarantined: '后端已拒绝复用', riskEffects: '目标风险动作次数', authorizedDestination: '宿主授权目的地', deliveredDigest: '实际交付摘要', documentReads: '外部文档读取次数', digestDestination: '摘要发送目的地', executedTask: '实际执行任务', authorizedGoal: '宿主授权目标', trustedPrincipal: '宿主可信主体', delegatedRole: '委托角色', hostPermissions: '宿主权限', integrityMatched: '制品摘要匹配', pluginExecutions: '插件处理器执行次数', pluginName: '插件展示名称', actualCapability: '插件实际能力', memoryEntries: '已保存记忆条数', memoryContainsPoison: '记忆含投毒标记', recalledMemory: '再次读取的记忆', retrievalReads: '知识源实际检索次数', deliveredChunks: '交付模型的文档数', workerActions: '接收方实际执行次数', dependencyFailed: '上游依赖已失败', downstreamOrders: '下游订单数', retryAttempts: '重试次数', downstreamRequests: '下游访问计数', remainingRows: '剩余演示数据行', publishedReports: '已发布演示报告', completedSteps: '已完成任务步骤', stopRequested: '宿主已发停止信号', monitoringEnabled: '监测标记开启', completedReports: '完成维护报告数', hostCheckPassed: '宿主检查通过', publishedVerdict: '实际发布结论', trustedTenant: '宿主可信租户', accessedTenant: '实际读取租户', actualPublisher: '制品实际发布者', deliveredMemories: '已交付记忆数', executedReceiver: '实际执行接收者', deduplicatedRequests: '已去重请求数', approvedAmountCents: '宿主批准金额（分）', transferredCents: '实际转账金额（分）', scannedRecords: '已扫描记录数', authorizedRecords: '授权扫描记录数' };
 const display = (value: unknown) => typeof value === 'object' ? JSON.stringify(value) : String(value ?? '—');
 
-function Evidence({ title, caseId, guarded, observation, category }: { category: 'asi02' | 'asi05'; title: string; caseId: string; guarded: boolean; observation: Observation }) {
+function Evidence({ title, caseId, guarded, observation, category }: { category: string; title: string; caseId: string; guarded: boolean; observation: Observation }) {
   const triggered = observation.requestedCalls.length > 0;
-  const label = (category === 'asi05' ? asi05Label : asi02Label)(caseId, observation, guarded);
+  const label = (category === 'asi05' ? asi05Label : category === 'asi02' ? asi02Label : riskLabel)(caseId, observation, guarded);
   const keys = [...new Set([...Object.keys(observation.before), ...Object.keys(observation.after)])];
   return <section className={`evidence-card ${observation.status}`}>
     <div className="evidence-heading"><h3>{title}</h3><span>{label}</span></div>
@@ -34,8 +36,8 @@ function Evidence({ title, caseId, guarded, observation, category }: { category:
   </section>;
 }
 
-export function Asi02Chat({ entry, onBusyChange, category = 'asi02' }: { entry: CaseEntry; onBusyChange: (busy: boolean) => void; category?: 'asi02' | 'asi05' }) {
-  const categoryName = category === 'asi05' ? 'ASI05 意外代码执行' : 'ASI02 工具滥用';
+export function Asi02Chat({ entry, onBusyChange, category = 'asi02', categoryTitle }: { entry: CaseEntry; onBusyChange: (busy: boolean) => void; category?: string; categoryTitle?: string }) {
+  const categoryName = categoryTitle ?? (category === 'asi05' ? 'ASI05 意外代码执行' : 'ASI02 工具滥用');
   const [message, setMessage] = useState(entry.prompt);
   const [approval, setApproval] = useState('deny');
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -53,7 +55,7 @@ export function Asi02Chat({ entry, onBusyChange, category = 'asi02' }: { entry: 
     let active = true;
     setSourceError('');
     fetch(`/api/examples/${category}/${entry.id}/source`).then(async response => {
-      if (!response.ok) throw new Error('无法读取源码，请重新展开。');
+      if (!response.ok) throw new Error('无法读取源码，请关闭弹窗后重试。');
       const result = await response.json();
       if (active) setSource(result);
     }).catch(error => { if (active) setSourceError(error instanceof Error ? error.message : String(error)); });
@@ -85,19 +87,20 @@ export function Asi02Chat({ entry, onBusyChange, category = 'asi02' }: { entry: 
   return <main className="main simple-main asi02-main">
     <CollapsibleIntro eyebrow={`${categoryName} / ${entry.name.slice(0, 2)}`} title={entry.name.slice(5)} badge={<span className="example-tag guarded"><ShieldCheck size={14} />原生 / 防护对照</span>}>
     <section className="lesson-intro"><p>{entry.description}</p>
-      <div className="lesson-actions"><button disabled={busy || !message.trim()} onClick={() => void run()}><Play size={14} />运行真实 LLM 对照</button><button onClick={() => setSourceOpen(value => !value)} aria-expanded={sourceOpen}><Code2 size={15} />{sourceOpen ? '收起代码' : '查看案例代码'}</button></div>
+      <div className="lesson-actions"><button disabled={busy || !message.trim()} onClick={() => void run()}><Play size={14} />运行真实 LLM 对照</button><button onClick={() => setSourceOpen(true)} aria-haspopup="dialog"><Code2 size={15} />查看案例代码</button></div>
       <div className="lesson-expected"><strong>触发后的预期观察</strong><p>{entry.expected}</p></div>
       <small>{entry.note}</small><small>两条路径分别请求已配置的真实 LLM，业务状态各自重置。模型可能拒绝或改写请求；以工具调用与状态证据为准，不保证每次都触发。</small>
       {entry.id === 'late-rejection' && <p className="asi02-caution">这是反例：即使显示拒绝，文件仍可能已被修改。请查看 fileContent。</p>}
     </section>
-    {sourceOpen && <section className="source-panel" aria-label={`${categoryName} 案例源码`}>{sourceError ? <p role="alert">{sourceError}</p> : !source ? <p>正在读取源码…</p> : <>
-      <div className="source-filename">{entry.source}</div><pre><code>{source.code}</code></pre>
-      <details><summary>共用执行与参数约束 · {category === 'asi05' ? 'ExecutionCase.java' : 'Rules.java'}</summary><pre><code>{source.rules}</code></pre></details>
-      <details><summary>原生与 Starter 接线 · ExperimentRunner.java</summary><pre><code>{source.runner}</code></pre></details>
-    </>}</section>}
     </CollapsibleIntro>
+    <SourceDialog open={sourceOpen} onClose={() => setSourceOpen(false)} title={entry.source}>{sourceError ? <p role="alert">{sourceError}</p> : !source ? <p>正在读取源码…</p> : <>
+      <div className="source-filename">{entry.source}</div><pre><code>{source.code}</code></pre>
+      <details><summary>共用执行与参数约束 · {category === 'asi05' ? 'ExecutionCase.java' : category === 'asi02' ? 'Rules.java' : 'LearningCase.java / 宿主校验'}</summary><pre><code>{source.rules}</code></pre></details>
+      <details><summary>原生与 Starter 接线 · ExperimentRunner.java</summary><pre><code>{source.runner}</code></pre></details>
+    </>}</SourceDialog>
+
     <div className="conversation asi02-conversation" aria-live="polite" aria-busy={busy}>
-      {!turns.length && <div className="simple-empty"><ShieldCheck size={28} /><h2>看工具做了什么。</h2><p>运行同一任务，比较工具执行和业务状态。<br />{category === 'asi05' ? '只执行固定实验脚本；文件与接收器均为本轮临时资源。' : '不需要连接真实数据库、邮件或支付服务。'}</p></div>}
+      {!turns.length && <div className="simple-empty"><ShieldCheck size={28} /><h2>看工具做了什么。</h2><p>运行同一任务，比较工具执行和业务状态。<br />{category === 'asi05' ? '只执行固定实验脚本；文件与接收器均为本轮临时资源。' : '数据、制品、消息和下游动作均在本轮合成环境中，不连接真实业务系统。'}</p></div>}
       {turns.map(turn => <article className="comparison-turn" key={turn.id}><p className="comparison-question">{turn.question}</p>
         <details className="experiment-request"><summary>本轮网页请求 · POST {turn.request.path}</summary><pre><code>{JSON.stringify(turn.request.body, null, 2)}</code></pre></details>
         {turn.error ? <p className="message-error" role="alert">{turn.error}</p> : turn.result

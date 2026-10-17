@@ -68,3 +68,19 @@
   .catalog-shell .composer-hint{padding-top:7px}
   .evidence-card pre,.evidence-card .trace-steps pre{padding:11px;font-size:12px}
 }
+
+.case-count{margin-left:auto;display:inline-flex;justify-content:center;min-width:19px;padding:1px 5px;border-radius:9px;background:#e0e9d9;color:#64775a;font-size:10px;font-weight:400;flex-shrink:0}
+
+/* 源码脱离顶部说明区，拥有独立的大阅读窗口。 */
+.source-dialog{width:min(1200px,calc(100vw - 48px));height:90dvh;max-width:none;max-height:calc(100dvh - 32px);padding:0;border:1px solid var(--line);border-radius:14px;background:#f1f4ed;color:var(--ink);box-shadow:0 24px 90px #14291d40;overflow:hidden}
+.source-dialog[open]{display:flex;flex-direction:column}
+.source-dialog::backdrop{background:#14291d99;backdrop-filter:blur(3px)}
+.source-dialog-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-shrink:0;padding:16px 22px;border-bottom:1px solid var(--line);background:#fafbf7}
+.source-dialog-heading>div{display:flex;align-items:center;gap:10px;min-width:0}
+.source-dialog-heading h2{font-size:15px;margin:0;overflow-wrap:anywhere}
+.source-dialog-heading button{display:flex;align-items:center;gap:6px;flex-shrink:0;border:1px solid var(--line);border-radius:7px;padding:8px 10px;background:white;font-size:12px}
+.source-dialog .source-dialog-content{flex:1;min-height:0;max-height:none;overflow:auto;overscroll-behavior:contain;padding:22px;border:0}
+.source-dialog-content pre{font-size:13px;line-height:1.8;max-height:none;tab-size:4}
+.source-dialog-content summary{font-size:13px;padding:12px 0}
+.source-dialog :focus-visible{outline:2px solid var(--green);outline-offset:3px}
+@media(max-width:720px){.source-dialog{width:calc(100vw - 16px);height:calc(100dvh - 24px);max-height:calc(100dvh - 24px);border-radius:10px}.source-dialog-heading{padding:12px;gap:8px}.source-dialog-heading h2{font-size:13px}.source-dialog-heading button span{display:none}.source-dialog .source-dialog-content{padding:12px}.source-dialog-content pre{padding:14px;font-size:12px}}

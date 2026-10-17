@@ -20,3 +20,5 @@ flowchart LR
     T --> A
     O --> A
 ```
+
+完整的 [OWASP 十大 Agent 风险实验目录](top10-live-cases.md) 已包含 43 个真实模型对照案例，沿用统一配置与完整调用过程展示。

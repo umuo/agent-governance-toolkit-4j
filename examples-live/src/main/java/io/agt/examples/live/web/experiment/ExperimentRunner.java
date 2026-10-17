@@ -53,6 +53,11 @@ public abstract class ExperimentRunner {
 
     protected abstract String systemMessage();
 
+    /** 个别教学案例可显式使用脆弱 Agent 配置；两条路径仍接收相同提示。 */
+    protected String systemMessage(String caseId) {
+        return systemMessage();
+    }
+
     public Comparison compare(String id, String message, String approval) {
         validate(id);
         return new Comparison(
@@ -140,7 +145,7 @@ public abstract class ExperimentRunner {
                 Consumer<AiServices<Assistant>> configure =
                         builder ->
                                 builder.chatModel(model)
-                                        .systemMessageProvider(ignored -> systemMessage())
+                                        .systemMessageProvider(ignored -> systemMessage(id))
                                         .tools(tools)
                                         .beforeToolExecution(
                                                 event -> trace.add("tool_start", event.request()))
@@ -296,7 +301,22 @@ public abstract class ExperimentRunner {
                                 "command_integrity_denied",
                                 "command_arguments_denied",
                                 "sandbox_timeout",
-                                "sandbox_output_limit")
+                                "sandbox_output_limit",
+                                "artifact_integrity_denied",
+                                "plugin_manifest_denied",
+                                "plugin_publisher_denied",
+                                "evidence_mismatch_denied",
+                                "agent_audience_denied",
+                                "agent_signature_denied",
+                                "agent_replay_denied",
+                                "dependency_failed",
+                                "memory_poison_denied",
+                                "retrieval_poison_denied",
+                                "session_revoked",
+                                "data_permission_denied",
+                                "data_tenant_denied",
+                                "data_owner_denied",
+                                "data_operation_denied")
                         .contains(code);
         String status = unavailable ? "unavailable" : blocked ? "blocked" : "error";
         // 不回传 Provider 的原始异常，以免响应中携带密钥或连接配置。

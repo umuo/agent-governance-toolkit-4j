@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ArrowUp, Code2, MessageSquare, ShieldCheck } from 'lucide-react';
+import { SourceDialog } from '@/components/source-dialog';
 import { CollapsibleIntro } from '@/components/collapsible-intro';
 import { Markdown } from '@/components/markdown';
 
@@ -67,17 +68,18 @@ export function SimpleChat({ example, onBusyChange }: { example: Example; onBusy
     <CollapsibleIntro eyebrow={`${example.folder} / ${example.name.slice(0, 2)}`} title={example.name.slice(5)} badge={<span className={`example-tag ${example.guarded ? 'guarded' : ''}`}>{example.guarded ? <ShieldCheck size={14} /> : <MessageSquare size={14} />}{example.guarded ? 'AGT 护栏' : '原生 · 无 AGT 护栏'}</span>}>
     <section className="lesson-intro">
       <p>{example.description}</p>
-      <div className="lesson-actions"><button onClick={() => void send(example.prompt)} disabled={busy}>运行推荐提问 <span>↗</span></button><button onClick={() => setSourceOpen(previous => !previous)} aria-expanded={sourceOpen}><Code2 size={15} />{sourceOpen ? '收起代码' : '查看最简代码'}</button></div>
+      <div className="lesson-actions"><button onClick={() => void send(example.prompt)} disabled={busy}>运行推荐提问 <span>↗</span></button><button onClick={() => setSourceOpen(true)} aria-haspopup="dialog"><Code2 size={15} />查看最简代码</button></div>
       <div className="lesson-expected"><strong>推荐提问</strong><p>{example.prompt}</p><strong>预期观察</strong><p>{example.expected}</p></div>
       {example.guarded && <small>这三个入门案例共用输入拦截、演示号码脱敏和工具权限规则。输入匹配与号码替换都是字面规则。</small>}
     </section>
-    {sourceOpen && <section className="source-panel" aria-label="案例源码">
+    </CollapsibleIntro>
+    <SourceDialog open={sourceOpen} onClose={() => setSourceOpen(false)} title={example.source}>
       {sourceError ? <p role="alert">{sourceError}</p> : !source ? <p role="status">正在读取源码…</p> : <>
         <div className="source-filename">{example.source}</div><pre><code>{source.code}</code></pre>
         {source.configuration && <details><summary>共用规则与 Starter 配置 · SimpleExamplesConfiguration.java</summary><pre><code>{source.configuration}</code></pre></details>}
       </>}
-    </section>}
-    </CollapsibleIntro>
+    </SourceDialog>
+
     <div className="conversation simple-conversation" aria-live="polite" aria-busy={busy}>
       {!turns.length && <div className="simple-empty"><MessageSquare size={28} /><h2>一个案例，只看一个重点。</h2><p>运行推荐提问，或输入自己的问题。<br />每次请求独立，不携带之前的对话。</p></div>}
       {turns.map(turn => <article className="turn" key={turn.id}>

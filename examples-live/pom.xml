@@ -66,6 +66,11 @@
         <targetPath>experiment-examples</targetPath>
         <includes><include>*.java</include></includes>
       </resource>
+      <resource>
+        <directory>src/main/java/io/agt/examples/live/web/risks</directory>
+        <targetPath>risk-examples</targetPath>
+        <includes><include>**/*.java</include></includes>
+      </resource>
     </resources>
     <plugins>
       <plugin>
