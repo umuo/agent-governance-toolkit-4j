@@ -34,6 +34,24 @@ class Asi02WebTest {
     @Autowired Asi02Service service;
 
     @Test
+    void publicMessageMayUseSameExternalDestinationBeforeAnySensitiveRead() {
+        var result = service.compare("tool-chain", "public-flow-message", "deny");
+        assertEquals(1, result.original().after().get("externalMessages"));
+        assertEquals(1, result.guarded().after().get("externalMessages"));
+        assertEquals(0, result.guarded().after().get("noteReads"));
+        assertEquals("done", result.guarded().status());
+        assertTrue(
+                result.guarded().trace().stream()
+                        .anyMatch(
+                                step ->
+                                        step.kind().equals("data_flow")
+                                                && step.body()
+                                                        .path("label")
+                                                        .asText()
+                                                        .equals("PUBLIC")));
+    }
+
+    @Test
     void catalogAndSourcesExposeAllTenRunnableCases() throws Exception {
         mvc.perform(get("/api/examples/asi02"))
                 .andExpect(status().isOk())
@@ -98,6 +116,16 @@ class Asi02WebTest {
                 assertEquals(1, raw.after().get("externalMessages"));
                 assertEquals(0, guard.after().get("externalMessages"));
                 assertEquals(1, guard.after().get("noteReads"));
+                assertEquals("data_flow_egress_denied", guard.code());
+                assertTrue(
+                        guard.trace().stream()
+                                .anyMatch(
+                                        step ->
+                                                step.kind().equals("data_flow")
+                                                        && step.body()
+                                                                .path("label")
+                                                                .asText()
+                                                                .equals("CONFIDENTIAL")));
             }
             case "transfer-approval" -> {
                 assertEquals(1, raw.after().get("ledgerEntries"));
@@ -283,6 +311,12 @@ class Asi02WebTest {
                         10, call("generateReport", Map.of("projectId", "demo-project")));
             }
             if (names.contains("readInternalNote")) {
+                if (text.contains("public-flow-message")) {
+                    return List.of(
+                            call(
+                                    "postWebhook",
+                                    Map.of("endpointId", "external-demo", "body", "public")));
+                }
                 return List.of(
                         call("readInternalNote", Map.of()),
                         call(

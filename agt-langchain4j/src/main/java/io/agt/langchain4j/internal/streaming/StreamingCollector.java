@@ -18,6 +18,7 @@ import io.agt.core.HostSession;
 import io.agt.core.JsonValues;
 import io.agt.langchain4j.StreamingLimits;
 import io.agt.langchain4j.internal.message.TextProjection;
+import io.agt.langchain4j.internal.model.ModelExecutionBridge;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -34,15 +35,21 @@ final class StreamingCollector implements StreamingChatResponseHandler {
     private long characters;
     private long events;
     private boolean terminal;
+    private final ModelExecutionBridge.Call observation;
 
     private StreamingCollector(
-            HostSession session, StreamingLimits limits, StreamingChatResponseHandler preview) {
+            HostSession session,
+            StreamingLimits limits,
+            StreamingChatResponseHandler preview,
+            ModelExecutionBridge.Call observation) {
         this.limits = limits;
         this.session = session;
         this.preview = preview;
+        this.observation = observation;
         result.whenComplete(
                 (value, error) -> {
                     if (error != null) {
+                        if (observation != null) observation.requestCancellation();
                         cancelTransport();
                     }
                 });
@@ -64,14 +71,31 @@ final class StreamingCollector implements StreamingChatResponseHandler {
             ChatRequest request,
             ChatRequestOptions options,
             StreamingChatResponseHandler preview) {
-        var collector = new StreamingCollector(session, limits, preview);
+        return collect(session, model, limits, request, options, preview, null);
+    }
+
+    static CompletableFuture<ChatResponse> collect(
+            HostSession session,
+            StreamingChatModel model,
+            StreamingLimits limits,
+            ChatRequest request,
+            ChatRequestOptions options,
+            StreamingChatResponseHandler preview,
+            ModelExecutionBridge.Call observation) {
+        var collector = new StreamingCollector(session, limits, preview, observation);
         // provider 的入口可能尚未返回；取得 handle 后也必须能立即响应会话终止。
         session.watchTermination(collector.result);
+        boolean entered = false;
         try {
             session.checkActive();
+            if (observation != null) observation.enter();
+            entered = true;
             model.chat(request, options, collector);
         } catch (Throwable error) {
-            collector.onError(error);
+            if (!entered && observation != null) {
+                observation.abandon();
+                collector.fail(error);
+            } else collector.onError(error);
         }
         return collector.result;
     }
@@ -187,7 +211,7 @@ final class StreamingCollector implements StreamingChatResponseHandler {
                 preview(handler -> handler.onUnmappedRawEvent(value));
             }
         } catch (RuntimeException error) {
-            onError(error);
+            fail(error);
         }
     }
 
@@ -196,15 +220,21 @@ final class StreamingCollector implements StreamingChatResponseHandler {
             return;
         }
         try (var scope = session.bind()) {
-            session.checkActive();
+            session.checkDelivery();
             emit.accept(preview);
         } catch (Throwable error) {
-            onError(error);
+            fail(error);
         }
     }
 
     @Override
     public void onCompleteResponse(ChatResponse response) {
+        try {
+            if (observation != null) observation.response(response);
+        } catch (RuntimeException invalid) {
+            fail(invalid);
+            return;
+        }
         if (result.isDone()) {
             return;
         }
@@ -214,12 +244,17 @@ final class StreamingCollector implements StreamingChatResponseHandler {
                 result.complete(response);
             }
         } catch (RuntimeException error) {
-            onError(error);
+            fail(error);
         }
     }
 
     @Override
     public void onError(Throwable error) {
+        if (observation != null) observation.failure(error, "stream_failed");
+        fail(error);
+    }
+
+    private void fail(Throwable error) {
         synchronized (this) {
             if (terminal || result.isDone()) {
                 return;

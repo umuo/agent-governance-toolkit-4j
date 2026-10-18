@@ -1,0 +1,85 @@
+{
+  "date": "2026-10-17",
+  "phase": "P0 local delegation, shared call budgets and termination",
+  "traceId": "6b38dd09ff2f55ac9e60971a6368687c",
+  "status": "completed",
+  "records": [
+    {
+      "agent": "coordinator-agent",
+      "kind": "task_budget",
+      "body": {
+        "taskId": "f1e6b183-8c99-4dd4-adf5-0a58a3243b38",
+        "modelCalls": 3,
+        "toolCalls": 1,
+        "dataCalls": 0,
+        "activeSessions": 1,
+        "limits": {
+          "calls": {
+            "maxModelCalls": 8,
+            "maxToolCalls": 5,
+            "maxDurationMillis": 120000
+          },
+          "maxDataCalls": 10,
+          "maxConcurrentSessions": 3,
+          "maxDelegationDepth": 1
+        }
+      }
+    },
+    {
+      "agent": "research-agent",
+      "kind": "agent_authority",
+      "body": {
+        "delegationDepth": 1,
+        "permissions": [
+          "read"
+        ],
+        "parentSessionId": "63d73d04-7876-4a2d-b480-89252a28e7a8",
+        "taskId": "f1e6b183-8c99-4dd4-adf5-0a58a3243b38"
+      }
+    },
+    {
+      "agent": "review-agent",
+      "kind": "agent_authority",
+      "body": {
+        "delegationDepth": 1,
+        "permissions": [
+          "send"
+        ],
+        "parentSessionId": "63d73d04-7876-4a2d-b480-89252a28e7a8",
+        "taskId": "f1e6b183-8c99-4dd4-adf5-0a58a3243b38"
+      }
+    }
+  ],
+  "effects": {
+    "factReads": 1
+  },
+  "verification": {
+    "fullReactor": [
+      503,
+      0,
+      0,
+      1
+    ],
+    "coreIncludingAdditionalDeadlineTest": [
+      86,
+      0,
+      0,
+      0
+    ],
+    "countsFormat": [
+      "tests",
+      "failures",
+      "errors",
+      "skipped"
+    ],
+    "frontendBuild": "passed",
+    "browser": "root task budget dialog verified"
+  },
+  "remaining": [
+    "resource and task-scoped delegation",
+    "verifiable cross-process grants and revocation",
+    "token and monetary budgets",
+    "cross-step data flow controls",
+    "P1 hardening items listed in security-hardening-plan.md"
+  ]
+}

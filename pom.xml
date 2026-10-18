@@ -9,6 +9,13 @@
   <description>Pure Java runtime governance with a LangChain4j adapter</description>
   <modules>
     <module>agt-core</module>
+    <module>agt-identity</module>
+    <module>agt-audit-jdbc</module>
+    <module>agt-approval-jdbc</module>
+    <module>agt-effects-jdbc</module>
+    <module>agt-provenance</module>
+    <module>agt-delegation</module>
+    <module>agt-delegation-jdbc</module>
     <module>agt-observability</module>
     <module>agt-langchain4j</module>
     <module>agt-langchain4j-spring-boot-starter</module>
@@ -23,6 +30,7 @@
     <langchain4j.version>1.20.0</langchain4j.version>
     <spring-boot.version>3.5.16</spring-boot.version>
     <jackson.version>2.22.1</jackson.version>
+    <h2.version>2.4.240</h2.version>
   </properties>
   <dependencyManagement>
     <dependencies>

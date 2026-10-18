@@ -1,0 +1,90 @@
+{
+  "verifiedAt": "2026-10-17",
+  "scope": "Experimental authoritative cross-service external work ledger with JDBC persistence, receipt ownership, late reconciliation and complete versioned paging",
+  "verification": {
+    "command": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 spotless:apply verify",
+    "javaVersion": 17,
+    "reactorBuild": "SUCCESS",
+    "tests": 662,
+    "passed": 661,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1,
+    "skipReason": "Optional real-provider test is not enabled",
+    "coreTests": 130,
+    "delegationTests": 48,
+    "durableRegistryTests": 20,
+    "sandboxTests": 50,
+    "langchain4jTests": 231,
+    "frontendChangedOrRebuiltInThisPhase": false
+  },
+  "architecture": {
+    "beforeDispatch": "Synchronous authoritative work_register and work_start acknowledgement before actual backend start",
+    "afterTermination": "Node retains callbacks and observed evidence; bounded asynchronous metadata publication",
+    "sharedLimit": {
+      "active": 128,
+      "records": 100000
+    },
+    "checkpoint": "Pure work rows, cancellation deadlines, owner grant map, revision and sticky fault; no native execution replay",
+    "handoff": "Settled local history retained with original IDs/evidence; active or unknown work denied",
+    "paging": "128 rows/page, revision and full summary validated; concurrent mutation fails explicitly; no silent truncation",
+    "diagnosticConcurrency": "Remote snapshot does not hold task lock; blocked query cannot block heartbeat or revoke"
+  },
+  "realProcessScenarios": {
+    "normalCancel": {
+      "test": "ExternalWorkProcessTest.remoteCancellationConfirmsOnlyAfterActualPidExitAndPreservesImportedHistory",
+      "topology": "Two independent SDK JVMs, authenticated loopback HTTP status service, JDBC authority; fixed trusted Java child process",
+      "assertions": [
+        "Imported LOCAL_CHECK history preserved",
+        "Native PID initially alive",
+        "Owner cancellation waits for actual PID exit and direct-process receipt",
+        "Authoritative CANCEL_CONFIRMED, active=0, allTerminationConfirmed=true",
+        "Sibling session remains active after confirmed cancellation",
+        "Source view reads same global state"
+      ]
+    },
+    "sdkKilled": {
+      "test": "ExternalWorkProcessTest.killedSdkJvmLeavesLiveChildUnknownAndStopsSiblingBeforeDispatch",
+      "clock": "Real authority clock, observing actual lease expiration and confirmation timeout",
+      "failure": "Forcibly kill SDK JVM while its Java child remains alive",
+      "assertions": [
+        "External PID still alive after SDK death",
+        "Lease expiration gives CANCEL_REQUESTED rather than confirmation",
+        "No receipt leads UNKNOWN with active=1 and allTerminationConfirmed=false",
+        "Sibling START denied before creating a new PID marker",
+        "Sticky external_execution_unconfirmed fault persisted"
+      ],
+      "cleanup": "Test host manually kills its owned child in finally; this is not claimed as SDK acknowledgement"
+    },
+    "lateReceipt": {
+      "test": "ExternalWorkProcessTest.lostReceiptCanBeReconciledAfterTokenExpiryWithoutUnfreezingRoot",
+      "failure": "HTTP endpoint captures and rejects work_finish to simulate lost terminal evidence",
+      "clock": "Mutable authority clock advances beyond original delegation expiry and cancellation deadline; physical PID exit is separately observed",
+      "assertions": [
+        "Unknown state persists before reconciliation",
+        "Authenticated host replays captured genuine receipt against original private binding",
+        "Receipt accepted after expiry; active=0 and complete confirmation restored",
+        "Root fault remains external_execution_unconfirmed; execution is not revived"
+      ]
+    }
+  },
+  "protocolAndStorage": {
+    "globalConcurrency": "ExternalWorkRegistryTest.independentRegistryInstancesCannotMultiplyGlobalActiveWorkLimit: 140 concurrent attempts, 128 accepted; prepared cancellation safely releases slots",
+    "ownerChecks": "Wrong grant or session cannot finish another execution; finished history cannot be dispatched again",
+    "reopen": "Fresh JDBC registry instances retain unknown/late-confirmed state and imported source history",
+    "paging": "ExternalWorkProtocolTest reads all 257 rows over HTTP without duplicate/truncated IDs",
+    "schema": "Reject coercion, unexpected fields, numeric evidence and string booleans",
+    "state": "ExternalExecutionStateTest covers pure restore, timeout, sticky late proof, ownership, invalid checkpoints and mixed snapshot rejection"
+  },
+  "privacy": "Execution metadata contains opaque identifiers, kind, state, deadlines and proof plus authentication; captured work RPCs exclude executable paths, native fixture class, marker path, PID and model/query bodies; private transport fields remain sensitive",
+  "limitations": [
+    "Trusted authenticated SDK host/backend evidence required; no independent remote kernel attestation",
+    "Only H2 and current-platform direct Java processes tested; production IAM/mTLS, HA/failover and whole-process-tree guarantees not claimed",
+    "No persistent node receipt outbox; lost final proof can remain unknown until trusted reconciliation",
+    "Whole-root JDBC checkpoints and large/high-throughput deployments require capacity verification",
+    "No automatic receipts for every model Provider HTTP operation; no billing refund or side-effect rollback implied",
+    "InMemory registry remains volatile; JDBC must be explicitly configured for restart persistence",
+    "Production identity, logical document versions, platform validation and P1 plan remain active"
+  ],
+  "followUp": "Guarded native MODEL_REQUEST lifecycle and optional trusted stop contract added; see model-termination-governance.json. Counts above remain this earlier phase verification."
+}

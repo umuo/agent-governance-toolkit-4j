@@ -1,0 +1,68 @@
+{
+  "verifiedAt": "2026-10-18",
+  "scope": "Optional authenticated, independently reviewed, encrypted JDBC approval with single-use grant consumption and monotonic witness confirmation; not a full enterprise workflow or exactly-once business execution guarantee",
+  "verification": {
+    "javaVersion": 17,
+    "focused": {
+      "command": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 -pl agt-approval-jdbc -am spotless:apply test",
+      "build": "SUCCESS",
+      "tests": 233,
+      "passed": 233,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "moduleTests": {"core": 173, "identity": 18, "auditJdbc": 21, "approvalJdbc": 21}
+    },
+    "fullReactor": {
+      "command": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 spotless:apply verify",
+      "build": "SUCCESS",
+      "tests": 847,
+      "passed": 846,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 1,
+      "skipReason": "Optional real-provider test is not enabled",
+      "moduleTests": {"core": 173, "identity": 18, "auditJdbc": 21, "approvalJdbc": 21, "effectsJdbc": 21, "provenance": 22, "delegation": 59, "delegationJdbc": 20, "observability": 6, "langchain4j": 273, "springBootStarter": 10, "sandbox": 50, "examplesLive": 153}
+    },
+    "documentation": {
+      "command": "python3 -m mkdocs build --strict",
+      "build": "SUCCESS",
+      "output": "Temporary local site, no publication",
+      "notes": "Three existing unrelated anchor-link INFO messages; no warnings in successful strict build"
+    },
+    "frontendChangedOrRebuiltInThisPhase": false
+  },
+  "capabilities": {
+    "identity": "Mandatory AuthenticatedActor from fixed identity policy; exact requester context and token binding; no stored bearer credentials",
+    "humanReview": "Different principal, same tenant and identity profile, fixed per-tool permissions, current trusted issuer human/MFA assertions",
+    "action": "Core ActionIdentity recomputed; session/action/tool/effective parameters/policy/effect rule/business intent bound; full reviewed request and private view capability checked",
+    "storage": "AES-256-GCM with catalog/config/request/revision/key/previous hash AAD; HMAC-sealed reviewed catalog; fixed host key provider and explicit deployment initialization",
+    "witness": "Mandatory independent AuditWitness; current or exactly one pending primary suffix; bounded encrypted lineage proves original commit when another worker has advanced",
+    "delivery": "VIEW confirmed before full request delivery; CONSUMED confirmed before allow response; online identity and deadline rechecked after confirmation",
+    "replay": "Consumed approval never becomes approved again; lost response or process exit can lose an unused grant but cannot automatically retry it",
+    "bodyRetention": "Current request body removed in denied/consumed/cancelled/expired states; explicit trusted expiry sweep handles unvisited expired pending/approved rows; tombstone/history remain",
+    "limits": "Configured total retained rows including tombstones, request <=64 KiB, state ciphertext <=128 KiB, views <=16, event/lineage bounds, per-resolver finite waiting threads/queue and SQL deadlines"
+  },
+  "tests": [
+    {"class": "JdbcApprovalStoreTest", "count": 15, "checks": ["Full request review and single use", "Actual decrypted terminal state no longer contains request body", "Self approval, cross tenant, wrong role and service reviewer denied", "Different reviewer or refreshed reviewer token cannot reuse view proof", "Changed request/action/private claim denied", "New view invalidates old view, metadata receipt preserves view version", "Cancellation/expiry/clock rollback/requester revocation", "Concurrent store consumption returns only one allow", "Valid old primary backup and missing witness fail closed", "Witness outage after decision can recover, lost consumption cannot return allow", "Cipher and catalog substitution rejected", "Delayed publisher verifies its lineage after another instance advances", "Expiry sweep clears bodies and retains tombstones", "Payload/retained record capacity", "Policy effect rule and expected business state bound", "Revocation during view or consumption confirmation suppresses delivery"]},
+    {"class": "ApprovalRuntimeTest", "count": 4, "checks": ["Actual IdentitySession and core approval to real HTTP backend", "Viewed parameters equal actual business request", "Independent human denial produces zero backend requests", "SDK timeout and late approval produce zero backend requests", "Per-resolver capacity, cancellation slot reuse and close"]},
+    {"class": "ApprovalProcessTest", "count": 2, "checks": ["Two independent SDK JVMs share primary/witness H2 and compete for same approval; backend request count 1", "Kill worker after CONSUMED DB commit before witness advance; next JVM confirms durable consumption and refuses; backend request count 0"]},
+    {"class": "AuditCryptoTest", "count": 2, "checks": ["AEAD integrity/nonces and old audit behavior", "Direct legacy JCA AES-GCM nonce prefix/AAD compatibility in both directions after extraction to shared core storage primitive"]}
+  ],
+  "notVerifiedOrNotImplemented": [
+    "No external enterprise IdP, actual MFA browser login, CSRF or approval workbench deployed",
+    "Actor assurance is issuer assertion; distinct subjects do not prove distinct natural persons",
+    "No quorum approval or automatic revocation of previously issued human decisions",
+    "No resume of original JVM session/business after restart and no arbitrary workflow engine",
+    "No public cross-tenant admin or persistent reviewer queue API",
+    "H2 logical primary/witness run on same local test server, not separate production trust domains or database-server restart certification",
+    "No production database dialect, connection-pool wait, availability or load certification",
+    "Cross-node and restarted absolute deadlines still require trusted UTC; monotonic actor time is per live instance, not an independent trusted time service",
+    "SQL deadline does not bound an improperly configured DataSource connection wait",
+    "Resolver limits are per instance; host must bound and close instances",
+    "No automatic tombstone archival, catalog/config migration or key rotation operations",
+    "Terminal body removal does not crypto-erase backups, WAL or old ciphertext",
+    "Approval consumption and remote business are not one atomic transaction; unknown business results require durable effect reconciliation",
+    "Supply-chain tool version approval and credential isolation still pending"
+  ]
+}

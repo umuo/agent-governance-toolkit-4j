@@ -4,6 +4,10 @@ import io.agt.core.approval.ApprovalResolver;
 import io.agt.core.audit.AuditRecord;
 import io.agt.core.audit.AuditSink;
 import io.agt.core.data.DataLimits;
+import io.agt.core.delegation.DelegationScope;
+import io.agt.core.delegation.SessionAuthority;
+import io.agt.core.flow.LabelStore;
+import io.agt.core.injection.*;
 import io.agt.core.policy.StructuredPolicy;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -35,29 +39,107 @@ public final class AgentControl implements AutoCloseable {
     final String version;
     final BudgetLimits budget;
     final DataLimits dataLimits;
+    final LabelStore labelStore;
+    final InjectionRuntime injection;
     final EnforcementMode mode;
     final ApprovalResolver approvalResolver;
     final long approvalTimeoutMillis;
     final ThreadPoolExecutor approvals;
     private final AuditSink audit;
+    private final io.agt.core.audit.AuditBodyPolicy auditBodyPolicy;
     final ThreadPoolExecutor workers;
     final ScheduledThreadPoolExecutor deadlines;
+    final ThreadPoolExecutor externalCancellations;
+    final Set<io.agt.core.execution.ExternalExecutionRegistry> externalRegistries =
+            ConcurrentHashMap.newKeySet();
     private final ThreadPoolExecutor failureAudit;
     private final ThreadLocal<HostSession> current = new ThreadLocal<>();
     private final Set<HostSession> sessions = ConcurrentHashMap.newKeySet();
     private volatile boolean closed;
     private volatile boolean auditFailed;
+    private final java.util.Map<String, io.agt.core.tools.ToolLease> reviewedTools;
+
+    /** 宿主适配器在向模型公开工具元数据前查询固定版本要求。 */
+    public String requiredToolBinding(String name) {
+        return evaluator.toolBinding(Identifiers.require(name));
+    }
+
+    public io.agt.core.tools.ToolLease reviewedTool(String name) {
+        var lease = reviewedTools.get(Identifiers.require(name));
+        if (lease == null) {
+            if (!reviewedTools.isEmpty() || evaluator.toolBinding(name) != null)
+                throw new GovernanceException("tool_version_unregistered");
+            return null;
+        }
+        lease.check();
+        return lease;
+    }
+
+    public void validateToolSpecification(
+            String name, java.util.Map<String, Object> specification) {
+        var lease = reviewedTool(name);
+        if (lease != null) lease.validateSpecification(specification);
+    }
+
+    public void validateToolSpecification(
+            String name, java.util.Map<String, Object> specification, TrustedContext identity) {
+        validateToolSpecification(name, specification);
+        var lease = reviewedTool(name);
+        if (lease != null) {
+            lease.validate(identity);
+            if (evaluator instanceof io.agt.core.policy.StructuredPolicy policy
+                    && !identity.permissions()
+                            .containsAll(policy.document().tools().get(name).permissions()))
+                throw new GovernanceException("tool_version_permission_denied");
+        }
+    }
 
     private AgentControl(Builder b) {
         evaluator = Objects.requireNonNull(b.evaluator);
+        var pins = new java.util.LinkedHashMap<String, io.agt.core.tools.ToolLease>();
+        for (var lease : b.reviewedTools) {
+            lease.check();
+            if (!Objects.equals(evaluator.toolBinding(lease.name()), lease.identity())
+                    || pins.putIfAbsent(lease.name(), lease) != null)
+                throw new GovernanceException("tool_version_binding_denied");
+        }
+        reviewedTools = java.util.Map.copyOf(pins);
+        if (evaluator instanceof io.agt.core.policy.StructuredPolicy policy)
+            policy.document()
+                    .tools()
+                    .forEach(
+                            (name, rule) -> {
+                                if (rule.binding() != null && !reviewedTools.containsKey(name))
+                                    throw new GovernanceException("tool_version_unregistered");
+                            });
         version = Identifiers.require(evaluator.version());
         budget = Objects.requireNonNull(b.budget);
         dataLimits = Objects.requireNonNull(b.dataLimits);
+        labelStore = b.labelStore;
         mode = Objects.requireNonNull(b.mode);
         audit = Objects.requireNonNull(b.audit, "An audit sink is required");
+        auditBodyPolicy = Objects.requireNonNull(audit.bodyPolicy());
+        var injectionChecks = java.util.List.copyOf(evaluator.injectionChecks());
+        for (var check : injectionChecks)
+            if (!evaluator.interventionPoints().containsAll(check.points()))
+                throw new GovernanceException("injection_points_not_configured");
+        injection = new InjectionRuntime(injectionChecks, b.detectors);
         approvalResolver = b.approvalResolver;
         approvalTimeoutMillis = b.approvalTimeoutMillis;
         AsyncLimits limits = Objects.requireNonNull(b.asyncLimits);
+        externalCancellations =
+                new ThreadPoolExecutor(
+                        2,
+                        2,
+                        30,
+                        TimeUnit.SECONDS,
+                        new ArrayBlockingQueue<>(128),
+                        task -> {
+                            var thread = new Thread(task, "agt-external-cancel");
+                            thread.setDaemon(true);
+                            return thread;
+                        },
+                        new ThreadPoolExecutor.AbortPolicy());
         workers =
                 new ThreadPoolExecutor(
                         limits.workerThreads(),
@@ -116,10 +198,23 @@ public final class AgentControl implements AutoCloseable {
         return builder(StructuredPolicy.fromPath(path));
     }
 
+    public StructuredPolicy.Document exportAuthorizationPolicy() {
+        checkRuntime();
+        if (mode != EnforcementMode.ENFORCE || !(evaluator instanceof StructuredPolicy policy)) {
+            throw new GovernanceException("delegation_policy_export_unsupported");
+        }
+        return policy.document();
+    }
+
     public void requirePoints(Set<InterventionPoint> points) {
         if (!evaluator.interventionPoints().containsAll(points)) {
             throw new GovernanceException("point_not_configured");
         }
+    }
+
+    /** 整体输出检测不能由尚未完成检查的实时预览绕过。 */
+    public boolean requiresCompleteOutputCheck() {
+        return injection.requiresCompleteOutputCheck();
     }
 
     public HostSession openSession(TrustedContext context) {
@@ -144,17 +239,134 @@ public final class AgentControl implements AutoCloseable {
         return createSession(context, true, Objects.requireNonNull(execution));
     }
 
+    /** 显式派生可跨线程绑定的会话；身份来自宿主，链路头不能授予委托权限。 */
+    public HostSession openDelegatedSession(HostSession parent, TrustedContext context) {
+        return openDelegatedSession(parent, context, null);
+    }
+
+    public HostSession openDelegatedSession(
+            HostSession parent, TrustedContext context, ExecutionContext execution) {
+        return openDelegatedSession(parent, context, execution, null);
+    }
+
+    public HostSession openDelegatedSession(
+            HostSession parent,
+            TrustedContext context,
+            ExecutionContext execution,
+            DelegationScope scope) {
+        Objects.requireNonNull(parent);
+        Objects.requireNonNull(context);
+        if (parent.control() != this) {
+            throw new GovernanceException("delegation_runtime_mismatch");
+        }
+        var issuer = parent.context();
+        if (!issuer.tenantId().equals(context.tenantId())
+                || !issuer.principalId().equals(context.principalId())
+                || !issuer.permissions().containsAll(context.permissions())) {
+            throw new GovernanceException("delegation_scope_denied");
+        }
+        if (scope != null && parent.delegationScope() != null) {
+            scope.requireNarrowerThan(parent.delegationScope());
+        }
+        return createSession(context, true, execution, parent, null, scope);
+    }
+
     private HostSession createSession(
             TrustedContext context, boolean detached, ExecutionContext execution) {
+        return createSession(context, detached, execution, null);
+    }
+
+    /** 创建 detached 根任务；后续显式派生的所有会话共享这些上限。 */
+    public HostSession openTaskSession(TrustedContext context, TaskLimits limits) {
+        return createSession(context, true, null, null, Objects.requireNonNull(limits));
+    }
+
+    public HostSession openTaskSession(
+            TrustedContext context, TaskLimits limits, ExecutionContext execution) {
+        return createSession(context, true, execution, null, Objects.requireNonNull(limits));
+    }
+
+    public HostSession openTaskSession(
+            TrustedContext context,
+            TaskLimits limits,
+            ExecutionContext execution,
+            DelegationScope scope) {
+        return createSession(
+                context,
+                true,
+                execution,
+                null,
+                Objects.requireNonNull(limits),
+                Objects.requireNonNull(scope));
+    }
+
+    private HostSession createSession(
+            TrustedContext context,
+            boolean detached,
+            ExecutionContext execution,
+            HostSession parent) {
+        return createSession(context, detached, execution, parent, null);
+    }
+
+    private HostSession createSession(
+            TrustedContext context,
+            boolean detached,
+            ExecutionContext execution,
+            HostSession parent,
+            TaskLimits limits) {
+        return createSession(context, detached, execution, parent, limits, null);
+    }
+
+    private HostSession createSession(
+            TrustedContext context,
+            boolean detached,
+            ExecutionContext execution,
+            HostSession parent,
+            TaskLimits limits,
+            DelegationScope scope) {
+        return createSession(context, detached, execution, parent, limits, scope, null);
+    }
+
+    /** 已由宿主验证的在线授权；不能从 Trace 头创建。 */
+    public HostSession openAuthorizedSession(
+            SessionAuthority authority, TaskLimits limits, ExecutionContext execution) {
+        Objects.requireNonNull(authority);
+        Objects.requireNonNull(limits);
+        authority.validateRuntime(evaluator, budget, dataLimits, mode);
+        if (limits.maxDelegationDepth() > authority.remainingDelegationDepth()) {
+            throw new GovernanceException("delegation_depth_exceeded");
+        }
+        return createSession(authority.identity(), true, execution, null, limits, null, authority);
+    }
+
+    private HostSession createSession(
+            TrustedContext context,
+            boolean detached,
+            ExecutionContext execution,
+            HostSession parent,
+            TaskLimits limits,
+            DelegationScope scope,
+            SessionAuthority authority) {
         Objects.requireNonNull(context);
         checkRuntime();
         requirePoints(
                 EnumSet.of(InterventionPoint.AGENT_STARTUP, InterventionPoint.AGENT_SHUTDOWN));
         HostSession session =
                 new HostSession(
-                        this, context, detached ? null : current.get(), detached, execution);
+                        this,
+                        context,
+                        detached ? null : current.get(),
+                        detached,
+                        execution,
+                        parent,
+                        limits,
+                        scope,
+                        authority);
         sessions.add(session);
         try {
+            session.attachTask();
+            session.attachAuthority();
+            if (parent != null) parent.attachChild(session);
             session.evaluate(InterventionPoint.AGENT_STARTUP, "startup", null, Map.of());
             checkRuntime();
             if (!detached) {
@@ -165,6 +377,9 @@ public final class AgentControl implements AutoCloseable {
         } catch (RuntimeException e) {
             sessions.remove(session);
             session.revoke();
+            session.detachTask();
+            session.closeAuthority();
+            if (parent != null) parent.detachChild(session);
             throw e;
         }
     }
@@ -221,14 +436,25 @@ public final class AgentControl implements AutoCloseable {
         }
     }
 
-    void emit(AuditRecord record) {
+    void emit(
+            io.agt.core.audit.AuditScope scope,
+            AuditRecord record,
+            boolean capture,
+            Object original,
+            Object effective) {
         boolean failedWrite = false;
         synchronized (this) {
             if (auditFailed) {
                 throw new GovernanceException("audit_failed");
             }
             try {
-                audit.write(record);
+                var body =
+                        capture
+                                ? auditBodyPolicy.capture(record.point(), original, effective)
+                                : io.agt.core.audit.AuditBody.omitted("not_collected");
+                audit.write(
+                        new io.agt.core.audit.AuditEvent(
+                                java.util.UUID.randomUUID().toString(), scope, record, body));
             } catch (Exception e) {
                 auditFailed = true;
                 failedWrite = true;
@@ -388,9 +614,21 @@ public final class AgentControl implements AutoCloseable {
     public void close() {
         closed = true;
         sessions.forEach(s -> s.refuse("runtime_closed"));
+        externalRegistries.forEach(io.agt.core.execution.ExternalExecutionRegistry::runtimeClosed);
+        externalRegistries.clear();
         approvals.shutdownNow();
         workers.shutdownNow();
+        injection.close();
         deadlines.shutdownNow();
+        externalCancellations.shutdown();
+        try {
+            // 正常终止证据已排队时给出有界发布机会；不能在正常节点退出时直接丢弃回执。
+            if (!externalCancellations.awaitTermination(2, TimeUnit.SECONDS))
+                externalCancellations.shutdownNow();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            externalCancellations.shutdownNow();
+        }
         failureAudit.shutdown();
         try {
             if (!failureAudit.awaitTermination(5, TimeUnit.SECONDS)) {
@@ -405,14 +643,25 @@ public final class AgentControl implements AutoCloseable {
     }
 
     public static final class Builder {
+        private java.util.List<io.agt.core.tools.ToolLease> reviewedTools = java.util.List.of();
+
+        public Builder reviewedTools(java.util.Collection<io.agt.core.tools.ToolLease> leases) {
+            reviewedTools = java.util.List.copyOf(leases);
+            if (reviewedTools.size() > 128)
+                throw new IllegalArgumentException("Too many reviewed tools");
+            return this;
+        }
+
         private final PolicyEvaluator evaluator;
         private BudgetLimits budget;
         private DataLimits dataLimits;
+        private LabelStore labelStore;
         private EnforcementMode mode = EnforcementMode.ENFORCE;
         private AuditSink audit;
         private ApprovalResolver approvalResolver;
         private long approvalTimeoutMillis = 30_000;
         private AsyncLimits asyncLimits = AsyncLimits.defaults();
+        private final Map<String, DetectorBinding> detectors = new java.util.LinkedHashMap<>();
 
         private Builder(PolicyEvaluator evaluator) {
             this.evaluator = Objects.requireNonNull(evaluator);
@@ -428,8 +677,21 @@ public final class AgentControl implements AutoCloseable {
             return this;
         }
 
+        /** 持久标签由宿主管理生命周期和连接超时，不包含在模型可见配置或 Trace 中。 */
+        public Builder labelStore(LabelStore value) {
+            labelStore = Objects.requireNonNull(value);
+            return this;
+        }
+
         public Builder asyncLimits(AsyncLimits value) {
             asyncLimits = Objects.requireNonNull(value);
+            return this;
+        }
+
+        public Builder detector(String name, String revision, InjectionDetector detector) {
+            Identifiers.require(name);
+            if (detectors.putIfAbsent(name, new DetectorBinding(revision, detector)) != null)
+                throw new IllegalArgumentException("Duplicate detector binding");
             return this;
         }
 

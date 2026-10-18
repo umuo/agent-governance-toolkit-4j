@@ -291,10 +291,17 @@ public final class NativeServices {
                                 control,
                                 context.streamingChatModel,
                                 options.streamingLimits(),
-                                options.delivery());
+                                options.delivery(),
+                                options.modelUsageMeter(),
+                                options.modelTerminationContract());
             }
             if (context.chatModel != null) {
-                context.chatModel = ModelAdapters.guard(control, context.chatModel);
+                context.chatModel =
+                        ModelAdapters.guard(
+                                control,
+                                context.chatModel,
+                                options.modelUsageMeter(),
+                                options.modelTerminationContract());
             }
             if (context.moderationModel != null) {
                 context.chatModel =
@@ -358,7 +365,11 @@ public final class NativeServices {
         @Override
         public void tools(Map<ToolSpecification, ToolExecutor> tools) {
             var guarded = new LinkedHashMap<ToolSpecification, ToolExecutor>();
-            tools.forEach((spec, executor) -> guarded.put(spec, guard(spec.name(), executor)));
+            tools.forEach(
+                    (spec, executor) ->
+                            guarded.put(
+                                    ToolAdapters.reviewedSpecification(control, spec),
+                                    guard(spec.name(), executor)));
             super.tools(guarded);
         }
 
@@ -416,6 +427,9 @@ public final class NativeServices {
                 }
                 guarded.add(
                         tool.toBuilder()
+                                .toolSpecification(
+                                        ToolAdapters.reviewedSpecification(
+                                                control, tool.toolSpecification()))
                                 .toolExecutor(guard(tool.name(), tool.toolExecutor()))
                                 .build());
             }

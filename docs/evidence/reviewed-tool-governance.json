@@ -1,0 +1,135 @@
+{
+  "verifiedAt": "2026-10-18",
+  "scope": "Optional local reviewed artifact/specification allowlist, core dispatch/approval version binding and native pre-model tool metadata validation; not publisher-signature, arbitrary delegate origin, remote deployment or plugin sandbox certification",
+  "verification": {
+    "javaVersion": 17,
+    "fullReactor": {
+      "command": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 spotless:apply verify",
+      "build": "SUCCESS",
+      "tests": 863,
+      "passed": 862,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 1,
+      "skipReason": "Optional real-provider test is not enabled",
+      "moduleTests": {
+        "core": 181,
+        "identity": 18,
+        "auditJdbc": 21,
+        "approvalJdbc": 22,
+        "effectsJdbc": 21,
+        "provenance": 22,
+        "delegation": 59,
+        "delegationJdbc": 20,
+        "observability": 6,
+        "langchain4j": 280,
+        "springBootStarter": 10,
+        "sandbox": 50,
+        "examplesLive": 153
+      },
+      "notes": "Sequential completion run on final production and test sources; includes missing-pin startup rejection, all seven native assertions and identity/approval/HTTP integration",
+      "finishedAt": "2026-10-18T19:41:43+08:00"
+    },
+    "finalTargeted": {
+      "command": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 -pl agt-langchain4j,agt-approval-jdbc -am spotless:apply test -Dtest=ToolSupplyChainTest,ReviewedToolsTest,CoreGovernanceTest,TaskBudgetTest,EffectDelegationTest,ApprovalRuntimeTest -Dsurefire.failIfNoSpecifiedTests=false",
+      "build": "SUCCESS",
+      "tests": 73,
+      "passed": 73,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "moduleTests": {
+        "core": 56,
+        "delegation": 6,
+        "langchain4j": 6,
+        "approvalJdbc": 5
+      },
+      "notes": "Includes final constructor rejection when a structured policy requires a tool binding without the pinned lease; all other production sources unchanged"
+    },
+    "finalNativeAssertions": {
+      "command": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 -pl agt-langchain4j -am spotless:apply test -Dtest=ReviewedToolsTest -Dsurefire.failIfNoSpecifiedTests=false",
+      "build": "SUCCESS",
+      "tests": 7,
+      "passed": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "notes": "Final test source adds one native callback revocation case and strengthens existing schema/metadata/strict checks; no subsequent production changes"
+    },
+    "documentation": {
+      "command": "python3 -m mkdocs build --strict",
+      "build": "SUCCESS",
+      "output": "Temporary local site, no publication",
+      "notes": "Three existing unrelated anchor-link INFO messages; no warnings in successful strict build"
+    },
+    "frontendChangedOrRebuiltInThisPhase": false
+  },
+  "capabilities": {
+    "approvalSource": "Fixed host-reviewed descriptor, not automatically approving current provider data",
+    "artifact": "Actual supplied bytes match fixed sha256, copied before checking and retained within a total catalog budget; host loader must consume immutable snapshot",
+    "specification": "Complete LC4j ToolSpecification JSON, including description/parameters/metadata/strict, frozen and matched before exposure",
+    "policy": "Optional ToolRule.binding, null omission preserves old signed policy fingerprints; explicit fixed AgentControl lease set, startup rejects missing pins",
+    "dispatch": "Opaque local lease object required; ordinary JSON or another catalog cannot substitute; rechecked after prepare and before post-result delivery",
+    "approval": "PolicyRequest.toolBinding and ActionIdentity include actual descriptor digest; real authenticated session and encrypted approval preserve it to HTTP tool execution",
+    "revocation": "Local irreversible revoke/close, enforcement-mode requirement, suppressed late async and native callback delivery; no rollback of prior side effects",
+    "limits": "1-128 tools, <=64KiB specification projection, configured 1-16777216 total retained artifact bytes, same-name registration reused after rechecking",
+    "privacy": "Lease/artifact excluded from model parameters and audit target; tool_binding digest added to audit warnings"
+  },
+  "tests": [
+    {
+      "class": "ToolSupplyChainTest",
+      "count": 8,
+      "checks": [
+        "Changed bytes or poisoned description rejected",
+        "Immutable bytes and metadata; same registration reused",
+        "Total retained artifact capacity",
+        "Missing runtime pin and plain JSON call denied",
+        "Bound execution and version audit warning",
+        "Runtime/descriptor permissions",
+        "Prepare/approval revocation stops delegate",
+        "Approval digest changes with version binding",
+        "Async late output suppressed",
+        "Observation mode and replacement catalog rejected"
+      ]
+    },
+    {
+      "class": "ReviewedToolsTest",
+      "count": 7,
+      "checks": [
+        "Actual native AiServices ToolProvider and executor positive path",
+        "Dynamic poisoned description causes zero model and tool calls",
+        "Static description/schema/metadata/strict and additional tool rejected",
+        "Direct ChatModel and delegate defaults checked",
+        "Sync/context/async adapter and late-result refusal",
+        "Native before-tool callback revocation prevents delegate entry; delegate revocation prevents after callback delivery"
+      ]
+    },
+    {
+      "class": "ApprovalRuntimeTest",
+      "newCases": 1,
+      "checks": [
+        "Actual IdentitySession plus reviewed lease to encrypted independent-human approval then real loopback HTTP backend; reviewed digest preserved; backend requests 0 before approval and 1 after"
+      ]
+    },
+    {
+      "class": "EffectDelegationTest",
+      "count": 6,
+      "checks": [
+        "Existing effect delegation behavior and exact legacy policy shape with absent effect/binding fields"
+      ]
+    }
+  ],
+  "notVerifiedOrNotImplemented": [
+    "No Sigstore KeylessVerifier or SLSA provenance verifier integration in this phase",
+    "Host factory/loader is trusted; registering bytes does not prove arbitrary Java delegate binary origin",
+    "Provider identifier is reviewed configuration, not authentication of an actual server connection",
+    "No remote MCP deployment attestation, dependency/SBOM verification or adversarial plugin isolation",
+    "No persistent human catalog publishing workflow or cross-node revocation directory",
+    "No bound EffectToolRegistration automatic composition; unsupported paths fail closed",
+    "No reviewed tool submission through existing signed remote SessionAuthority; default fails closed instead of stripping binding",
+    "No credential broker, OAuth exchange or incoming-token passthrough protection automatically enabled by catalog",
+    "Catalog memory budget does not bound host loader copies, pre-existing MCP network parsing or arbitrary plugin execution",
+    "No atomic catalog revocation plus external dispatch or rollback of already committed side effects",
+    "No production load, external model, real third-party artifact signatures or remote service rollout verification"
+  ]
+}

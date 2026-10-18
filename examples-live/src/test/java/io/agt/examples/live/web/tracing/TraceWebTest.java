@@ -66,6 +66,39 @@ class TraceWebTest {
                         .findFirst()
                         .orElseThrow();
         var children = agents.stream().filter(n -> !n.spanId().equals(root.spanId())).toList();
+        var budget =
+                root.payloads().stream()
+                        .filter(p -> p.kind().equals("task_budget"))
+                        .findFirst()
+                        .orElseThrow()
+                        .body();
+        assertEquals(3, budget.path("modelCalls").asInt());
+        assertEquals(1, budget.path("toolCalls").asInt());
+        assertEquals(1, budget.path("activeSessions").asInt());
+        assertEquals(3, budget.path("limits").path("maxConcurrentSessions").asInt());
+        for (var child : children) {
+            var authority =
+                    child.payloads().stream()
+                            .filter(p -> p.kind().equals("agent_authority"))
+                            .findFirst()
+                            .orElseThrow()
+                            .body();
+            assertEquals(budget.path("taskId"), authority.path("taskId"));
+            assertEquals(1, authority.path("delegationDepth").asInt());
+            assertEquals(1, authority.path("permissions").size());
+            assertEquals("trace-demo", authority.path("taskName").asText());
+            assertEquals(1, authority.path("toolScopes").size());
+            assertTrue(
+                    authority
+                            .path("toolScopes")
+                            .has(
+                                    child.agentId().equals("research-agent")
+                                            ? "lookupFacts"
+                                            : "deliverDigest"));
+            assertEquals(
+                    child.agentId().equals("research-agent") ? "read" : "send",
+                    authority.path("permissions").get(0).asText());
+        }
         assertEquals(2, children.stream().map(TraceStore.Node::runId).distinct().count());
         assertTrue(children.stream().allMatch(n -> n.parentRunId().equals(root.runId())));
         assertTrue(
@@ -89,7 +122,7 @@ class TraceWebTest {
                         .orElseThrow();
         assertEquals(root.runId(), denied.parentRunId());
         assertEquals("blocked", denied.status());
-        assertEquals("tool_arguments_denied", denied.reasonCode());
+        assertEquals("delegation_arguments_denied", denied.reasonCode());
         var deniedRequest =
                 denied.payloads().stream()
                         .filter(p -> p.kind().equals("tool_request"))
@@ -104,7 +137,7 @@ class TraceWebTest {
                         .findFirst()
                         .orElseThrow();
         assertFalse(deniedResponse.body().path("executed").asBoolean(true));
-        assertEquals("tool_arguments_denied", deniedResponse.body().path("code").asText());
+        assertEquals("delegation_arguments_denied", deniedResponse.body().path("code").asText());
         assertFalse(
                 denied.payloads().stream()
                         .anyMatch(p -> p.kind().equals("tool_effective_arguments")));
@@ -148,7 +181,8 @@ class TraceWebTest {
                         .anyMatch(
                                 a ->
                                         a.spanId().equals(denied.spanId())
-                                                && "tool_arguments_denied".equals(a.reasonCode())));
+                                                && "delegation_arguments_denied"
+                                                        .equals(a.reasonCode())));
         assertTrue(view.audit().stream().allMatch(a -> spans.contains(a.spanId())));
         assertEquals(view, new TraceStore(directory).get(id));
         mvc.perform(get("/api/agent-traces/" + id))

@@ -6,6 +6,7 @@ import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.service.AiServices;
 import io.agt.core.*;
+import io.agt.core.delegation.DelegationScope;
 import io.agt.core.policy.*;
 import io.agt.observability.AgentTracer;
 import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
@@ -97,40 +98,75 @@ public final class MultiAgentTraceService {
                                     "coordinator-agent",
                                     "并行读取合成事实，并核验外部投递请求。",
                                     () -> {
-                                        traceId[0] = tracer.currentExecution().traceId();
-                                        accepted.complete(traceId[0]);
-                                        Future<String> research =
-                                                tracer.operation(
-                                                        "delegate",
-                                                        "research",
-                                                        () ->
-                                                                children.submit(
-                                                                        tracer.wrap(
-                                                                                (Callable<String>)
-                                                                                        () ->
-                                                                                                child(
-                                                                                                        "research-agent",
-                                                                                                        false,
-                                                                                                        model))));
-                                        Future<String> review =
-                                                tracer.operation(
-                                                        "delegate",
-                                                        "review",
-                                                        () ->
-                                                                children.submit(
-                                                                        tracer.wrap(
-                                                                                (Callable<String>)
-                                                                                        () ->
-                                                                                                child(
-                                                                                                        "review-agent",
-                                                                                                        true,
-                                                                                                        model))));
-                                        // 即使一个子任务失败，也等待另一个完成，根链不会先于子任务结束。
-                                        String first = await(research);
-                                        String second = await(review);
-                                        if (first.equals("error") || second.equals("error"))
-                                            throw new IllegalStateException("child_failed");
-                                        return "子任务已汇总";
+                                        try (var control =
+                                                        AgentControl.builder(tracePolicy())
+                                                                .audit(
+                                                                        tracer.correlate(
+                                                                                store::audit))
+                                                                .build();
+                                                var parent =
+                                                        control.openTaskSession(
+                                                                new TrustedContext(
+                                                                        "coordinator-agent",
+                                                                        "tenant-demo",
+                                                                        "demo-user",
+                                                                        Set.of("read", "send")),
+                                                                new TaskLimits(
+                                                                        new BudgetLimits(
+                                                                                8, 5, 120000),
+                                                                        10,
+                                                                        3,
+                                                                        1),
+                                                                tracer.currentExecution(),
+                                                                new DelegationScope(
+                                                                        "trace-demo",
+                                                                        true,
+                                                                        traceCapabilities(),
+                                                                        Map.of()));
+                                                var binding = parent.bind()) {
+                                            traceId[0] = tracer.currentExecution().traceId();
+                                            accepted.complete(traceId[0]);
+                                            Future<String> research =
+                                                    tracer.operation(
+                                                            "delegate",
+                                                            "research",
+                                                            () ->
+                                                                    children.submit(
+                                                                            tracer.wrap(
+                                                                                    (Callable<
+                                                                                                    String>)
+                                                                                            () ->
+                                                                                                    child(
+                                                                                                            "research-agent",
+                                                                                                            false,
+                                                                                                            model,
+                                                                                                            parent))));
+                                            Future<String> review =
+                                                    tracer.operation(
+                                                            "delegate",
+                                                            "review",
+                                                            () ->
+                                                                    children.submit(
+                                                                            tracer.wrap(
+                                                                                    (Callable<
+                                                                                                    String>)
+                                                                                            () ->
+                                                                                                    child(
+                                                                                                            "review-agent",
+                                                                                                            true,
+                                                                                                            model,
+                                                                                                            parent))));
+                                            // 即使一个子任务失败，也等待另一个完成，根链不会先于子任务结束。
+                                            String first = await(research);
+                                            String second = await(review);
+                                            if (first.equals("error") || second.equals("error"))
+                                                throw new IllegalStateException("child_failed");
+                                            store.capture(
+                                                    tracer.currentExecution(),
+                                                    "task_budget",
+                                                    parent.taskSnapshot());
+                                            return "子任务已汇总";
+                                        }
                                     });
                         } catch (RuntimeException error) {
                             outcome = "error";
@@ -219,7 +255,7 @@ public final class MultiAgentTraceService {
         }
     }
 
-    private String child(String agentId, boolean review, ChatModel model) {
+    private String child(String agentId, boolean review, ChatModel model, HostSession parent) {
         String taskInput =
                 review
                         ? "请调用 deliverDigest，destination 为 external-demo，完成本轮合成投递。"
@@ -228,91 +264,121 @@ public final class MultiAgentTraceService {
                 agentId,
                 taskInput,
                 () -> {
-                    var policy =
-                            StructuredPolicy.builder("trace-demo-v1")
-                                    .budget(new BudgetLimits(8, 5, 120000))
-                                    .tool(
-                                            "lookupFacts",
-                                            new ToolRule(
-                                                    Set.of("read"),
-                                                    ParameterRule.object(Map.of()),
-                                                    false))
-                                    .tool(
-                                            "deliverDigest",
-                                            new ToolRule(
-                                                    Set.of("send"),
-                                                    ParameterRule.object(
-                                                            Map.of(
-                                                                    "destination",
-                                                                    new ParameterRule(
-                                                                            ParameterRule.Type
-                                                                                    .STRING,
-                                                                            null,
-                                                                            null,
-                                                                            java.util.List.of(
-                                                                                    "internal-demo"),
-                                                                            null,
-                                                                            null,
-                                                                            null,
-                                                                            null,
-                                                                            null,
-                                                                            null)),
-                                                            "destination"),
-                                                    false))
-                                    .build();
                     var identity =
                             new TrustedContext(
                                     agentId,
                                     "tenant-demo",
                                     "demo-user",
                                     review ? Set.of("send") : Set.of("read"));
-                    try (var control =
-                            AgentControl.builder(policy)
-                                    .audit(tracer.correlate(store::audit))
-                                    .build()) {
-                        return tracer.governed(
-                                control,
-                                identity,
-                                session -> {
-                                    var tools = new DemoTools(control, tracer, store);
-                                    ChatModel governedModel =
-                                            new io.agt.langchain4j.LangChain4jGovernance(control)
-                                                    .guardModel(model);
-                                    ChatModel observed =
-                                            new ChatModel() {
-                                                @Override
-                                                public ChatResponse doChat(ChatRequest request) {
-                                                    return tracer.operation(
-                                                            "model",
-                                                            "chat",
-                                                            () ->
-                                                                    captureModel(
-                                                                            governedModel,
-                                                                            request));
-                                                }
-                                            };
-                                    var assistant =
-                                            AiServices.builder(Assistant.class)
-                                                    .chatModel(observed)
-                                                    .tools(tools)
-                                                    .systemMessageProvider(
-                                                            ignored ->
-                                                                    "你在本机可重置教学环境工作。工具只读取合成资料、写本轮内存计数，不连接真实外部系统。按用户要求实际调用指定工具，然后如实汇报；工具拒绝时停止，不编造成功。")
-                                                    .maxSequentialToolsInvocations(5)
-                                                    .toolExecutionErrorHandler(
-                                                            (error, context) -> {
-                                                                if (error
-                                                                        instanceof
-                                                                        RuntimeException failure)
-                                                                    throw failure;
-                                                                throw new GovernanceException(
-                                                                        "tool_failed");
-                                                            })
-                                                    .build();
-                                    return control.run(taskInput, assistant::chat);
-                                });
-                    }
+                    var control = parent.control();
+                    return tracer.governedDelegated(
+                            parent,
+                            identity,
+                            new DelegationScope(
+                                    "trace-demo",
+                                    true,
+                                    Map.of(
+                                            review ? "deliverDigest" : "lookupFacts",
+                                            traceCapabilities()
+                                                    .get(review ? "deliverDigest" : "lookupFacts")),
+                                    Map.of()),
+                            session -> {
+                                store.capture(
+                                        tracer.currentExecution(),
+                                        "agent_authority",
+                                        Map.of(
+                                                "taskId", session.taskSnapshot().taskId(),
+                                                "parentSessionId", parent.sessionId(),
+                                                "delegationDepth", session.delegationDepth(),
+                                                "permissions", session.context().permissions(),
+                                                "taskName", session.delegationScope().taskName(),
+                                                "toolScopes", session.delegationScope().tools()));
+                                var tools = new DemoTools(control, tracer, store);
+                                ChatModel governedModel =
+                                        new io.agt.langchain4j.LangChain4jGovernance(control)
+                                                .guardModel(model);
+                                ChatModel observed =
+                                        new ChatModel() {
+                                            @Override
+                                            public ChatResponse doChat(ChatRequest request) {
+                                                return tracer.operation(
+                                                        "model",
+                                                        "chat",
+                                                        () -> captureModel(governedModel, request));
+                                            }
+                                        };
+                                var assistant =
+                                        AiServices.builder(Assistant.class)
+                                                .chatModel(observed)
+                                                .tools(tools)
+                                                .systemMessageProvider(
+                                                        ignored ->
+                                                                "你在本机可重置教学环境工作。工具只读取合成资料、写本轮内存计数，不连接真实外部系统。按用户要求实际调用指定工具，然后如实汇报；工具拒绝时停止，不编造成功。")
+                                                .maxSequentialToolsInvocations(5)
+                                                .toolExecutionErrorHandler(
+                                                        (error, context) -> {
+                                                            if (error
+                                                                    instanceof
+                                                                    RuntimeException failure)
+                                                                throw failure;
+                                                            throw new GovernanceException(
+                                                                    "tool_failed");
+                                                        })
+                                                .build();
+                                return control.run(taskInput, assistant::chat);
+                            });
                 });
+    }
+
+    private StructuredPolicy tracePolicy() {
+        return StructuredPolicy.builder("trace-demo-v1")
+                .budget(new BudgetLimits(8, 5, 120000))
+                .tool(
+                        "lookupFacts",
+                        new ToolRule(Set.of("read"), ParameterRule.object(Map.of()), false))
+                .tool(
+                        "deliverDigest",
+                        new ToolRule(
+                                Set.of("send"),
+                                ParameterRule.object(
+                                        Map.of(
+                                                "destination",
+                                                new ParameterRule(
+                                                        ParameterRule.Type.STRING,
+                                                        null,
+                                                        null,
+                                                        java.util.List.of("internal-demo"),
+                                                        null,
+                                                        null,
+                                                        null,
+                                                        null,
+                                                        null,
+                                                        null)),
+                                        "destination"),
+                                false))
+                .build();
+    }
+
+    private Map<String, ParameterRule> traceCapabilities() {
+        return Map.of(
+                "lookupFacts",
+                ParameterRule.object(Map.of()),
+                "deliverDigest",
+                ParameterRule.object(
+                        Map.of(
+                                "destination",
+                                new ParameterRule(
+                                        ParameterRule.Type.STRING,
+                                        null,
+                                        null,
+                                        java.util.List.of("internal-demo"),
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        null)),
+                        "destination"));
     }
 
     public static final class DemoTools {

@@ -1,0 +1,86 @@
+{
+  "verifiedAt": "2026-10-17",
+  "scope": "Content-addressed document/message provenance in governed native data adapters; conservative instance policy retained",
+  "identities": {
+    "resource": "Full host-bound DataResource descriptor",
+    "document": "Native TextSegment text; document metadata id/label/trusted excluded",
+    "message": "Supported native ChatMessage role/body/structure projection; attributes excluded",
+    "namespace": "AGT-FRAGMENT-V1 + resource descriptor + fragment descriptor",
+    "boundaries": "Content identity is not a logical document revision, occurrence ID, content trust proof or cross-language canonicalization standard"
+  },
+  "nativeScenarios": {
+    "testClass": "FragmentProvenanceTest",
+    "syncAndAsync": [
+      "Per-fragment CONFIDENTIAL classification defeats forged PUBLIC/trusted metadata before native model execution",
+      "Memory write redaction records the prepared stored message, not the old input hash",
+      "Reopened label directory retains original WRITE task/action and grade on message read"
+    ],
+    "readRedaction": "Returned text changes; original source reference and classification remain",
+    "samePartitionPublicItem": "Separate task reading different unclassified public content remains PUBLIC; single-fragment classification does not label whole source partition",
+    "capacity": "129 projected items rejected; session failed; no untracked result delivered"
+  },
+  "crossJvmScenario": {
+    "test": "FragmentRemoteProcessTest.twoSdkJvmsUseActionBoundMetadataOnlyRpcAndDurableFragmentState",
+    "transport": "Two fresh SDK JVMs; authenticated loopback HTTP status endpoint backed by JDBC checkpoints and labels",
+    "publicWorker": "PUBLIC:1:1",
+    "confidentialWorker": "CONFIDENTIAL:1:0",
+    "parentOutput": "Denied after confidential child read",
+    "reopenedRegistry": "Same fragment source and CONFIDENTIAL grade restored",
+    "classificationAction": "Actual admitted data action ID, matching flow_validate_action RPC",
+    "privacyAssertion": "Captured status requests contain no synthetic document body, query or model input"
+  },
+  "negativeActionBinding": {
+    "test": "JdbcGrantRegistryTest.fragmentReadRequiresMatchingAdmittedActionAndPersistsItsActualCausalReference",
+    "denied": [
+      "Missing admission",
+      "Legacy no-action fragment validation",
+      "Substituted data operation"
+    ],
+    "idempotency": "Repeated valid validation leaves classification revision one"
+  },
+  "otherCoverage": {
+    "FragmentFlowTest": [
+      "Pure checkpoint round-trip with nonpersistent fragments",
+      "Missing/rebound source rejected",
+      "Wrong projection direction denied before native execution and data quota refunded",
+      "Reference replacement and kind mismatch rejected"
+    ],
+    "JdbcLabelStoreTest.fragmentNamespaceTenantAndPartitionAreIndependentAndLabelsRemainMonotonic": "Eight parallel fragment writes preserve SECRET and revision 8; instance/fragment/tenant/partition isolation retained"
+  },
+  "configuration": {
+    "enabled": "Native guarded retriever/memory automatically when task DataFlowPolicy is configured",
+    "persistent": "Explicit LabelStore supporting fragment methods; default unsupported implementation denies",
+    "manualDataOperations": "Require explicit FragmentProjection to use per-item catalog; legacy overload remains instance-level",
+    "maximumProjectedItemsPerOperation": 128,
+    "maximumDistinctObservedFragmentsPerRoot": 128,
+    "maximumTotalSourceReferences": 512
+  },
+  "limitations": [
+    "No automatic classification of changed/new body; host ingestion and conservative instance baselines required",
+    "Identical contents in same instance share one fragment identity; no logical version or occurrence semantics",
+    "Instance-level labels remain conservative upper bounds; no declassification by redaction or memory eviction",
+    "WRITE is pre-execution conservative provenance, not confirmation of external side-effect success",
+    "Digest is not anonymization; low-entropy contents can be guessed",
+    "Custom unwrapped data access and direct raw SDK/backend calls remain outside this governance path",
+    "Only H2 tested; production IAM/HA/encryption/retention/tamper-evident audit not claimed",
+    "External cancellation confirmation and remaining P1 work are still active"
+  ],
+  "verification": {
+    "command": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 spotless:apply verify",
+    "javaVersion": 17,
+    "reactorBuild": "SUCCESS",
+    "tests": 640,
+    "passed": 639,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1,
+    "skipReason": "Optional real-provider test is not enabled",
+    "coreTests": 118,
+    "provenanceTests": 16,
+    "delegationTests": 46,
+    "durableRegistryTests": 14,
+    "langchain4jTests": 231,
+    "frontendChangedOrRebuiltInThisPhase": false
+  },
+  "followUp": "Optional logical document versions, immutable publication manifests and current-version checks added; see document-version-governance.json. Earlier verification counts above remain historical."
+}

@@ -1,0 +1,110 @@
+{
+  "verifiedAt": "2026-10-17",
+  "scope": "Single-JVM root-shared external execution cancellation receipts; fixed direct process and existing sandbox SDK integration",
+  "spike": {
+    "jdk": "https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/util/concurrent/CompletableFuture.html",
+    "referencePattern": "https://docs.temporal.io/develop/typescript/workflows/cancellation",
+    "implementation": "Reuse bounded executors, direct process onExit and agent-sandbox-sdk 0.1.0-alpha.2 cleanup; no workflow-engine dependency"
+  },
+  "lifecycle": {
+    "states": [
+      "PREPARED",
+      "RUNNING",
+      "CANCEL_REQUESTED",
+      "COMPLETED",
+      "CANCEL_CONFIRMED",
+      "UNKNOWN"
+    ],
+    "proofs": [
+      "CONFIRMED",
+      "NOT_STARTED",
+      "WORKER_ONLY",
+      "UNKNOWN"
+    ],
+    "preparedCancel": "NOT_STARTED; subsequent started() denied; no backend call",
+    "runningCancel": "Queue/request only; retain active slot until evidence",
+    "unknown": "Hold active slot and freeze root with external_execution_unconfirmed",
+    "lateReceipt": "May update terminal proof and release slot; root fault remains sticky",
+    "normalWorkerOnly": "COMPLETED with partial evidence; allTerminationConfirmed remains false",
+    "scope": "Only registered execution kind and promised scope; not all arbitrary OS work"
+  },
+  "limits": {
+    "recordsPerRoot": 100000,
+    "activePerRoot": 128,
+    "cancellationThreadsPerRuntime": 2,
+    "queuePerRuntime": 128,
+    "confirmationTimeoutMillis": 2000,
+    "timeoutTiming": "JVM scheduler, not hard real time"
+  },
+  "coreTests": {
+    "class": "ExternalExecutionTest",
+    "cases": [
+      "Prepared cancellation blocks dispatch without invoking backend",
+      "Child revoke is visible in shared parent snapshot and waits for actual acknowledgement",
+      "Timeout retains unknown active work; independent root remains usable; late proof cannot unfreeze fault",
+      "Cancelled CompletableFuture is not external stop evidence",
+      "Parent cascade requests child/grandchild cancellation; each acknowledgement independent",
+      "Runtime shutdown marks pending receipt unknown even after owner session closed",
+      "Worker-only completion is partial; exporting external history is explicitly rejected"
+    ]
+  },
+  "directProcessTests": {
+    "test": "FixedCommandTest.terminationStopsWaitAndCapacityIsReleased",
+    "variants": [
+      "revoke",
+      "close",
+      "interrupt"
+    ],
+    "backend": "Real fixed trusted Java child process",
+    "assertions": [
+      "Read actual child PID from synthetic marker",
+      "Cancellation stops caller wait",
+      "Actual PID no longer alive",
+      "Receipt reaches CANCEL_CONFIRMED",
+      "New independent task can reuse command after actual cleanup"
+    ],
+    "capacity": "Hold command semaphore until direct process/output reader receipt; unknown start quarantines command",
+    "scope": "Direct process and output reader only; unobservable descendants/process groups not proven",
+    "deadlineReason": "session_expired retained instead of cancellation-induced command_exit_denied"
+  },
+  "sandboxTests": {
+    "test": "SandboxCancellationReceiptTest.callerCancellationDoesNotConfirmSdkWorkerOrUnknownProcessCleanup",
+    "variants": [
+      "all cleanup confirmed",
+      "process cleanup UNKNOWN"
+    ],
+    "implementation": "Controllable SDK fake runner ignores interrupt until explicit release; not a kernel isolation test",
+    "beforeRelease": "Caller cancelled; pending=1, active=1, allTerminationConfirmed=false",
+    "afterCompleteCleanup": "CANCEL_CONFIRMED, unknown=0, active=0",
+    "afterUnknownCleanup": "UNKNOWN, unknown=1, active=1, root fault",
+    "reuse": "Existing sticky backend quarantine retained after cancellation"
+  },
+  "limitations": [
+    "Registry/acknowledgements local to one JVM; no coordinator-wide receipt aggregation or persistence yet",
+    "Source task with any external record refuses export: external_execution_delegation_unsupported; prevents silent history loss until remote bridge exists",
+    "Remote SDK lease failure can trigger its local callbacks but source cannot claim all remote work stopped",
+    "No automatic Provider HTTP termination receipt or billing reconciliation",
+    "No model/token refund, side-effect rollback or compensation implied by stop acknowledgement",
+    "Host callback is trusted evidence and must return promptly; arbitrary stuck Java code cannot be forcibly stopped",
+    "DIRECT_PROCESS does not prove entire descendant tree; sandbox worker-only evidence does not raise platform guarantee",
+    "Full P0/P1 plan remains active"
+  ],
+  "verification": {
+    "command": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 spotless:apply verify",
+    "javaVersion": 17,
+    "reactorBuild": "SUCCESS",
+    "tests": 649,
+    "passed": 648,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1,
+    "skipReason": "Optional real-provider test is not enabled",
+    "coreModuleTests": 125,
+    "sandboxModuleTests": 50,
+    "frontendChangedOrRebuiltInThisPhase": false
+  },
+  "followUp": {
+    "evidence": "distributed-external-cancellation-governance.json",
+    "change": "Cross-service authoritative state and JDBC receipts now implemented; settled history can be handed off; this file retains earlier single-JVM verification counts"
+  }
+}

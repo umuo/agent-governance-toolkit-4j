@@ -7,6 +7,7 @@ import io.agt.core.HostSession;
 import io.agt.core.Identifiers;
 import io.agt.core.TrustedContext;
 import io.agt.core.audit.AuditSink;
+import io.agt.core.delegation.DelegationScope;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanBuilder;
@@ -101,6 +102,32 @@ public final class AgentTracer {
         }
     }
 
+    /** 宿主显式授权的子 Agent；Trace 上下文只关联执行，不作为授权依据。 */
+    public <T> T governedDelegated(
+            HostSession parent, TrustedContext identity, Function<HostSession, T> task) {
+        return governedDelegated(parent, identity, null, task);
+    }
+
+    public <T> T governedDelegated(
+            HostSession parent,
+            TrustedContext identity,
+            DelegationScope authority,
+            Function<HostSession, T> task) {
+        try (var session =
+                        parent.control()
+                                .openDelegatedSession(
+                                        parent, identity, currentExecution(), authority);
+                var binding = session.bind()) {
+            Span.current().setAttribute("agt.task.id", session.taskSnapshot().taskId());
+            Span.current().setAttribute("agt.parent.session.id", parent.sessionId());
+            Span.current().setAttribute("agt.delegation.depth", session.delegationDepth());
+            if (session.delegationScope() != null) {
+                Span.current().setAttribute("agt.task.name", session.delegationScope().taskName());
+            }
+            return task.apply(session);
+        }
+    }
+
     public <T> T operation(String kind, String name, Supplier<T> task) {
         Identifiers.require(kind);
         Identifiers.require(name);
@@ -144,6 +171,11 @@ public final class AgentTracer {
                                 "tool_budget_exceeded",
                                 "model_budget_exceeded",
                                 "data_budget_exceeded",
+                                "task_model_budget_exceeded",
+                                "task_tool_budget_exceeded",
+                                "task_data_budget_exceeded",
+                                "task_token_budget_exceeded",
+                                "task_cost_budget_exceeded",
                                 "approval_timeout",
                                 "tool_circuit_open")
                         .contains(code);
@@ -174,10 +206,34 @@ public final class AgentTracer {
 
     /** 使审计指向当前工具/模型 span；无活动 scope 时保留会话内的执行关联。 */
     public AuditSink correlate(AuditSink sink) {
-        return record -> {
-            if (Context.current().get(RUN) != null)
-                sink.write(record.withExecution(currentExecution()));
-            else sink.write(record);
+        java.util.Objects.requireNonNull(sink);
+        return new AuditSink() {
+            public io.agt.core.audit.AuditBodyPolicy bodyPolicy() {
+                return sink.bodyPolicy();
+            }
+
+            public void write(io.agt.core.audit.AuditRecord record) throws Exception {
+                sink.write(correlated(record));
+            }
+
+            public void write(io.agt.core.audit.AuditEvent event) throws Exception {
+                sink.write(
+                        new io.agt.core.audit.AuditEvent(
+                                event.eventId(),
+                                event.scope(),
+                                correlated(event.record()),
+                                event.body()));
+            }
+
+            private io.agt.core.audit.AuditRecord correlated(io.agt.core.audit.AuditRecord record) {
+                return Context.current().get(RUN) != null
+                        ? record.withExecution(currentExecution())
+                        : record;
+            }
+
+            public void close() throws Exception {
+                sink.close();
+            }
         };
     }
 

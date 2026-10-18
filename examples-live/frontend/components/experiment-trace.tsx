@@ -8,7 +8,7 @@ const labels: Record<string, string> = {
   http_request: '实际 HTTP 请求体', http_response: '实际 HTTP 响应体',
   http_error: 'HTTP 请求失败', model_response: '模型返回（LangChain4j）', model_error: '模型请求失败',
   tool_start: '工具执行开始', tool_result: '工具执行结果', tool_error: '工具执行异常',
-  business_check: '宿主边界检查', governance: '治理检查', run_end: '本轮结束',
+  business_check: '宿主边界检查', governance: '治理检查', data_flow: '根任务数据流与敏感等级', run_end: '本轮结束',
 };
 
 function stepHint(step: TraceStep): string {
@@ -20,6 +20,7 @@ function stepHint(step: TraceStep): string {
     return [audit?.point, audit?.verdict, audit?.reason, audit?.approval].filter(Boolean).join(' · ');
   }
   if (step.kind === 'run_end') return [body.status, body.code].filter(Boolean).join(' · ');
+  if (step.kind === 'data_flow') return String(body.label ?? '');
   return '';
 }
 

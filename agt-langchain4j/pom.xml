@@ -8,6 +8,17 @@
   </parent>
   <artifactId>agt-langchain4j</artifactId>
   <dependencies>
+    <dependency><groupId>io.agt</groupId><artifactId>agt-audit-jdbc</artifactId><version>${project.version}</version><scope>test</scope></dependency>
+    <dependency><groupId>io.agt</groupId><artifactId>agt-effects-jdbc</artifactId><version>${project.version}</version><scope>test</scope></dependency>
+    <dependency><groupId>io.agt</groupId><artifactId>agt-delegation-jdbc</artifactId><version>${project.version}</version><scope>test</scope></dependency>
+    <dependency><groupId>io.agt</groupId><artifactId>agt-provenance</artifactId><version>${project.version}</version><scope>test</scope></dependency>
+    <dependency><groupId>com.h2database</groupId><artifactId>h2</artifactId><version>${h2.version}</version><scope>test</scope></dependency>
+    <dependency>
+      <groupId>io.agt</groupId>
+      <artifactId>agt-delegation</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
     <dependency>
       <groupId>io.agt</groupId>
       <artifactId>agt-core</artifactId>

@@ -13,12 +13,15 @@ import io.agt.core.AgentControl;
 import io.agt.core.GovernanceException;
 import io.agt.core.HostSession;
 import io.agt.core.InterventionPoint;
+import io.agt.langchain4j.ModelTerminationContract;
+import io.agt.langchain4j.ModelUsageMeter;
 import io.agt.langchain4j.internal.concurrent.AsyncSources;
 import io.agt.langchain4j.internal.message.TextProjection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 受治理的同步与异步聊天模型包装器。
@@ -28,10 +31,18 @@ import java.util.concurrent.CompletableFuture;
 final class GovernedChatModel implements ChatModel {
     private final AgentControl control;
     private final ChatModel delegate;
+    private final ModelUsageMeter meter;
+    private final ModelTerminationContract termination;
 
-    GovernedChatModel(AgentControl control, ChatModel delegate) {
+    GovernedChatModel(
+            AgentControl control,
+            ChatModel delegate,
+            ModelUsageMeter meter,
+            ModelTerminationContract termination) {
         this.control = control;
         this.delegate = delegate;
+        this.meter = meter;
+        this.termination = termination;
     }
 
     @Override
@@ -51,6 +62,7 @@ final class GovernedChatModel implements ChatModel {
                                             .overrideWith(request.parameters()))
                             .build();
             var input = merged.messages().stream().map(TextProjection::message).toList();
+            io.agt.langchain4j.internal.tool.ToolAdapters.validateModelTools(session, merged);
             return session.operationPrepared(
                     false,
                     null,
@@ -66,14 +78,25 @@ final class GovernedChatModel implements ChatModel {
                                     TextProjection.replace(
                                             merged.messages().get(i), values.get(i)));
                         }
-                        return merged.toBuilder().messages(messages).build();
+                        return ModelUsageBridge.prepare(
+                                session,
+                                merged.toBuilder().messages(messages).build(),
+                                meter,
+                                termination);
                     },
                     prepared -> {
-                        ChatResponse response = delegate.chat(prepared, options);
-                        session.recordTokens(
-                                response.tokenUsage() == null
-                                        ? null
-                                        : response.tokenUsage().totalTokenCount());
+                        io.agt.langchain4j.internal.tool.ToolAdapters.validateModelTools(
+                                session, prepared.request());
+                        prepared.execution().enter();
+                        ChatResponse response;
+                        try {
+                            response = delegate.chat(prepared.request(), options);
+                            prepared.execution().response(response);
+                        } catch (Throwable error) {
+                            prepared.execution().failure(error, "model_failed");
+                            throw error;
+                        }
+                        ModelUsageBridge.record(session, prepared, response);
                         return response;
                     },
                     response -> TextProjection.message(response.aiMessage()),
@@ -111,6 +134,8 @@ final class GovernedChatModel implements ChatModel {
                                             .overrideWith(request.parameters()))
                             .build();
             var input = merged.messages().stream().map(TextProjection::message).toList();
+            var preparedCall = new AtomicReference<ModelUsageBridge.Prepared>();
+            io.agt.langchain4j.internal.tool.ToolAdapters.validateModelTools(session, merged);
             return session.operationAsyncPrepared(
                     false,
                     null,
@@ -126,15 +151,35 @@ final class GovernedChatModel implements ChatModel {
                                     TextProjection.replace(
                                             merged.messages().get(i), values.get(i)));
                         }
-                        return merged.toBuilder().messages(messages).build();
+                        var prepared =
+                                ModelUsageBridge.prepare(
+                                        session,
+                                        merged.toBuilder().messages(messages).build(),
+                                        meter,
+                                        termination);
+                        preparedCall.set(prepared);
+                        return prepared;
                     },
-                    prepared ->
-                            AsyncSources.normalize(delegate.chatAsync(prepared, options), "model"),
+                    prepared -> {
+                        io.agt.langchain4j.internal.tool.ToolAdapters.validateModelTools(
+                                session, prepared.request());
+                        if (delegate instanceof TerminalAwareModel observed)
+                            return observed.chatAsyncObserved(
+                                    prepared.request(), options, prepared.execution());
+                        prepared.execution().enter();
+                        try {
+                            var nativeCall =
+                                    AsyncSources.normalize(
+                                            delegate.chatAsync(prepared.request(), options),
+                                            "model");
+                            return prepared.execution().observe(nativeCall);
+                        } catch (Throwable error) {
+                            prepared.execution().failure(error);
+                            throw error;
+                        }
+                    },
                     response -> {
-                        session.recordTokens(
-                                response.tokenUsage() == null
-                                        ? null
-                                        : response.tokenUsage().totalTokenCount());
+                        ModelUsageBridge.record(session, preparedCall.get(), response);
                         return TextProjection.message(response.aiMessage());
                     },
                     (response, effective) ->

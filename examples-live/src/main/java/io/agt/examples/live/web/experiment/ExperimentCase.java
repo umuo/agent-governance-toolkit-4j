@@ -1,6 +1,7 @@
 package io.agt.examples.live.web.experiment;
 
 import io.agt.core.AgentControl;
+import io.agt.core.TaskLimits;
 import io.agt.core.TrustedContext;
 import io.agt.core.policy.StructuredPolicy;
 import java.util.Map;
@@ -19,6 +20,11 @@ public interface ExperimentCase extends AutoCloseable {
     }
 
     default void attach(AgentControl control) {}
+
+    /** 可选根任务约束，由宿主案例声明，不接受网页上传策略。 */
+    default TaskLimits taskLimits() {
+        return null;
+    }
 
     @Override
     default void close() throws Exception {}

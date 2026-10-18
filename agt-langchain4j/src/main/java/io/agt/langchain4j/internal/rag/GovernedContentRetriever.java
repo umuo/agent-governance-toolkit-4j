@@ -9,8 +9,10 @@ import io.agt.core.GovernanceException;
 import io.agt.core.HostSession;
 import io.agt.core.data.DataOperation;
 import io.agt.core.data.DataResource;
+import io.agt.langchain4j.DocumentResolver;
 import io.agt.langchain4j.internal.concurrent.AsyncSources;
 import io.agt.langchain4j.internal.data.DataAccessSupport;
+import io.agt.langchain4j.internal.data.FragmentProjections;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -24,18 +26,29 @@ final class GovernedContentRetriever implements ContentRetriever {
     private final AgentControl control;
     private final DataResource resource;
     private final ContentRetriever delegate;
+    private final DocumentResolver resolver;
 
     GovernedContentRetriever(
             AgentControl control, DataResource resource, ContentRetriever delegate) {
+        this(control, resource, delegate, null);
+    }
+
+    GovernedContentRetriever(
+            AgentControl control,
+            DataResource resource,
+            ContentRetriever delegate,
+            DocumentResolver resolver) {
         this.control = control;
         this.resource = resource;
         this.delegate = delegate;
+        this.resolver = resolver;
     }
 
     @Override
     public List<Content> retrieve(Query query) {
         var session = control.currentSession();
         try {
+            requireFlow(session);
             return session.dataOperationPrepared(
                     resource,
                     DataOperation.RETRIEVE,
@@ -43,7 +56,8 @@ final class GovernedContentRetriever implements ContentRetriever {
                     v -> RetrievalProjection.replaceQuery(query, v, session),
                     delegate::retrieve,
                     result -> RetrievalProjection.contents(result, session),
-                    (result, v) -> RetrievalProjection.replaceContents(result, v, session));
+                    (result, v) -> RetrievalProjection.replaceContents(result, v, session),
+                    FragmentProjections.documents(resolver));
         } catch (RuntimeException error) {
             throw DataAccessSupport.failure(session, error);
         }
@@ -54,6 +68,7 @@ final class GovernedContentRetriever implements ContentRetriever {
         HostSession session = null;
         try {
             session = control.currentSession();
+            requireFlow(session);
             HostSession captured = session;
             return session.dataOperationAsyncPrepared(
                     resource,
@@ -66,11 +81,17 @@ final class GovernedContentRetriever implements ContentRetriever {
                                     delegate.retrieveAsync(prepared),
                                     () -> delegate.retrieve(prepared)),
                     result -> RetrievalProjection.contents(result, captured),
-                    (result, v) -> RetrievalProjection.replaceContents(result, v, captured));
+                    (result, v) -> RetrievalProjection.replaceContents(result, v, captured),
+                    FragmentProjections.documents(resolver));
         } catch (RuntimeException error) {
             return CompletableFuture.failedFuture(
                     session == null ? error : DataAccessSupport.failure(session, error));
         }
+    }
+
+    private void requireFlow(HostSession session) {
+        if (resolver != null && session.dataFlowSnapshot() == null)
+            throw new GovernanceException("document_flow_required");
     }
 
     @Override

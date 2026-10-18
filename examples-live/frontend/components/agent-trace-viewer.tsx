@@ -7,7 +7,7 @@ import { SourceDialog } from '@/components/source-dialog';
 import { CollapsibleIntro } from '@/components/collapsible-intro';
 
 type Payload = { kind: string; body: unknown; truncated: boolean; originalBytes: number };
-const payloadLabels: Record<string, string> = { agent_request: 'Agent 任务输入', agent_response: 'Agent 输出结果', model_request: '框架模型请求', model_response: '框架模型响应', http_request: '实际 HTTP 请求体', http_response: '实际 HTTP 响应体', model_error: '模型调用错误摘要', http_error: 'HTTP 调用错误摘要', tool_request: '工具请求参数', tool_effective_arguments: '校验后的实际执行参数', tool_response: '工具执行结果' };
+const payloadLabels: Record<string, string> = { agent_request: 'Agent 任务输入', agent_response: 'Agent 输出结果', model_request: '框架模型请求', model_response: '框架模型响应', http_request: '实际 HTTP 请求体', http_response: '实际 HTTP 响应体', model_error: '模型调用错误摘要', http_error: 'HTTP 调用错误摘要', tool_request: '工具请求参数', tool_effective_arguments: '校验后的实际执行参数', tool_response: '工具执行结果', agent_authority: '委托权限与父会话', task_budget: '根任务共享预算' };
 const payloadText = (payload: Payload) => typeof payload.body === 'string' ? payload.body : JSON.stringify(payload.body, null, 2);
 type Node = { payloads?: Payload[]; spanId: string; parentSpanId: string; name: string; kind: string; agentId: string | null; runId: string; parentRunId: string | null; agentInstanceId: string; startNanos: number; endNanos: number; status: string; reasonCode: string | null };
 type Audit = { sequence: number; agentId: string; runId: string; spanId: string; sessionId: string; actionId: string; point: string; verdict: string; reasonCode: string | null; outcome: string | null };

@@ -227,7 +227,14 @@ public abstract class ExperimentRunner {
                                                                                         false, true)
                                                                 ? ApprovalResponse.allow(request)
                                                                 : ApprovalResponse.deny(request)));
-                        var session = runtime.control().openSession(scenario.identity())) {
+                        var session =
+                                scenario.taskLimits() == null
+                                        ? runtime.control().openSession(scenario.identity())
+                                        : runtime.control()
+                                                .openTaskSession(
+                                                        scenario.identity(),
+                                                        scenario.taskLimits());
+                        var binding = session.bind()) {
                     scenario.attach(runtime.control());
                     try {
                         var assistant = runtime.services().create(Assistant.class, configure);
@@ -244,6 +251,9 @@ public abstract class ExperimentRunner {
                     } catch (Exception error) {
                         return failed(
                                 error, session, modelCalls.get(), before, scenario, calls, audits);
+                    } finally {
+                        if (session.dataFlowSnapshot() != null)
+                            trace.add("data_flow", session.dataFlowSnapshot());
                     }
                 }
             } catch (Exception error) {
@@ -292,6 +302,11 @@ public abstract class ExperimentRunner {
                                 "context_binding_denied",
                                 "tool_budget_exceeded",
                                 "model_budget_exceeded",
+                                "task_model_budget_exceeded",
+                                "task_tool_budget_exceeded",
+                                "task_data_budget_exceeded",
+                                "task_token_budget_exceeded",
+                                "task_cost_budget_exceeded",
                                 "session_expired",
                                 "approval_denied",
                                 "approval_timeout",
@@ -316,7 +331,20 @@ public abstract class ExperimentRunner {
                                 "data_permission_denied",
                                 "data_tenant_denied",
                                 "data_owner_denied",
-                                "data_operation_denied")
+                                "data_operation_denied",
+                                "data_flow_resource_denied",
+                                "data_flow_tool_unclassified_denied",
+                                "data_flow_destination_denied",
+                                "data_flow_egress_denied",
+                                "data_flow_write_denied",
+                                "data_flow_model_denied",
+                                "data_flow_output_denied",
+                                "data_flow_prerequisite_denied",
+                                "delegation_scope_denied",
+                                "delegation_tool_denied",
+                                "delegation_arguments_denied",
+                                "delegation_resource_denied",
+                                "delegation_model_denied")
                         .contains(code);
         String status = unavailable ? "unavailable" : blocked ? "blocked" : "error";
         // 不回传 Provider 的原始异常，以免响应中携带密钥或连接配置。

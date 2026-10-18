@@ -1,0 +1,51 @@
+{
+  "date": "2026-10-17",
+  "followUpEvidence": "distributed-usage-governance.json",
+  "scope": "root task token and monetary reservation/settlement",
+  "fullReactor": {
+    "tests": 550,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1
+  },
+  "providerVerification": {
+    "type": "official OpenAI client against local HTTP fixture",
+    "realProviderBillingVerified": false,
+    "modes": [
+      "sync/token",
+      "async/token",
+      "sync/cost",
+      "async/cost"
+    ],
+    "providerDefaultMaxCompletionTokens": 999,
+    "actualWireMaxCompletionTokens": 50,
+    "actualWireMaxTokens": null,
+    "allowedRequests": 2,
+    "rejectedThirdRequestBeforeTransport": true,
+    "settledTokens": 100,
+    "settledConfiguredCost": "0.00012",
+    "currency": "USD",
+    "priceSource": "fixed fixture values, not a market quote"
+  },
+  "invariants": [
+    "Concurrent reservations cannot spend the same root balance",
+    "Prepared cancellation refunds; dispatched unknown outcome retains hold and freezes task",
+    "Input/output/total and served model identity are required for settlement",
+    "Actual bound breach is recorded as an error and freezes further authority",
+    "Generic unmetered model operations cannot bypass opt-in usage budget",
+    "Zero allowance rejects consumption rather than disabling budget",
+    "All model entry paths require host metering and pricing configuration"
+  ],
+  "remaining": [
+    "cross-process delegation and revocation",
+    "distributed budget ledger and stop acknowledgement",
+    "P1 work in security-hardening-plan.md"
+  ],
+  "additionalCoreRegression": {
+    "tests": 115,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "includes": "concurrent data-flow denial refunds undispatched usage reservation without quarantining root"
+  }
+}

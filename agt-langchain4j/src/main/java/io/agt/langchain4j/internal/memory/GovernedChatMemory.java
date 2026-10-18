@@ -9,6 +9,7 @@ import io.agt.core.data.DataOperation;
 import io.agt.core.data.DataResource;
 import io.agt.langchain4j.internal.concurrent.AsyncSources;
 import io.agt.langchain4j.internal.data.DataAccessSupport;
+import io.agt.langchain4j.internal.data.FragmentProjections;
 import io.agt.langchain4j.internal.message.TextProjection;
 import java.util.ArrayList;
 import java.util.List;
@@ -99,7 +100,8 @@ final class GovernedChatMemory implements ChatMemory {
                             TextProjection.unsupported();
                         }
                         return null;
-                    });
+                    },
+                    FragmentProjections.memoryWrite());
         } catch (RuntimeException error) {
             throw DataAccessSupport.failure(session, error);
         }
@@ -122,7 +124,8 @@ final class GovernedChatMemory implements ChatMemory {
                     },
                     v -> delegate.messages(),
                     result -> TextProjection.messages(result, session),
-                    (result, v) -> TextProjection.replaceMessages(result, v, session));
+                    (result, v) -> TextProjection.replaceMessages(result, v, session),
+                    FragmentProjections.memoryRead());
         } catch (RuntimeException error) {
             throw DataAccessSupport.failure(session, error);
         }
@@ -198,7 +201,8 @@ final class GovernedChatMemory implements ChatMemory {
                             TextProjection.unsupported();
                         }
                         return null;
-                    });
+                    },
+                    FragmentProjections.memoryWrite());
         } catch (RuntimeException error) {
             return CompletableFuture.failedFuture(
                     session == null ? error : DataAccessSupport.failure(session, error));
@@ -226,7 +230,8 @@ final class GovernedChatMemory implements ChatMemory {
                             AsyncSources.fallback(
                                     captured, delegate.messagesAsync(), delegate::messages),
                     result -> TextProjection.messages(result, captured),
-                    (result, v) -> TextProjection.replaceMessages(result, v, captured));
+                    (result, v) -> TextProjection.replaceMessages(result, v, captured),
+                    FragmentProjections.memoryRead());
         } catch (RuntimeException error) {
             return CompletableFuture.failedFuture(
                     session == null ? error : DataAccessSupport.failure(session, error));

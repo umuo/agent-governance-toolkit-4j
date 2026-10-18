@@ -5,6 +5,8 @@ import io.agt.core.AgentControl;
 import io.agt.core.GovernanceException;
 import io.agt.core.HostSession;
 import io.agt.core.InterventionPoint;
+import io.agt.langchain4j.ModelTerminationContract;
+import io.agt.langchain4j.ModelUsageMeter;
 import io.agt.langchain4j.StreamDelivery;
 import io.agt.langchain4j.StreamingLimits;
 import java.util.Objects;
@@ -28,7 +30,28 @@ public final class StreamingAdapters {
             StreamingChatModel model,
             StreamingLimits limits,
             StreamDelivery delivery) {
+        return guard(control, model, limits, delivery, null);
+    }
+
+    public static StreamingChatModel guard(
+            AgentControl control,
+            StreamingChatModel model,
+            StreamingLimits limits,
+            StreamDelivery delivery,
+            ModelUsageMeter meter) {
+        return guard(control, model, limits, delivery, meter, null);
+    }
+
+    public static StreamingChatModel guard(
+            AgentControl control,
+            StreamingChatModel model,
+            StreamingLimits limits,
+            StreamDelivery delivery,
+            ModelUsageMeter meter,
+            ModelTerminationContract termination) {
         Objects.requireNonNull(model);
+        if (delivery == StreamDelivery.REALTIME && control.requiresCompleteOutputCheck())
+            throw new GovernanceException("injection_strict_stream_required");
         control.requirePoints(
                 Set.of(InterventionPoint.PRE_MODEL_CALL, InterventionPoint.POST_MODEL_CALL));
         if (!model.listeners().isEmpty()) {
@@ -38,7 +61,7 @@ public final class StreamingAdapters {
             throw new GovernanceException("already_governed");
         }
         return new GovernedStreamingChatModel(
-                control, model, Objects.requireNonNull(limits), delivery);
+                control, model, Objects.requireNonNull(limits), delivery, meter, termination);
     }
 
     public static BufferedStreamControl buffered(

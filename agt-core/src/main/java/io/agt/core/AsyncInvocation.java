@@ -1,5 +1,8 @@
 package io.agt.core;
 
+import io.agt.core.usage.ManagedModelInput;
+import io.agt.core.usage.MeteredModelInput;
+import io.agt.core.usage.ModelUsageReservation;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
@@ -27,7 +30,7 @@ final class AsyncInvocation<E, T> {
     private final Object input;
     private final Object lock = new Object();
     private final Function<Object, E> prepare;
-    private final Function<E, ? extends CompletionStage<T>> execute;
+    private final BiFunction<String, E, ? extends CompletionStage<T>> execute;
     private final Function<T, Object> project;
     private final BiFunction<T, Object, T> replace;
     private final long start = System.nanoTime();
@@ -41,6 +44,9 @@ final class AsyncInvocation<E, T> {
     private volatile FutureTask<Void> startTask;
     private volatile Thread startThread;
     private volatile CompletableFuture<T> source;
+    private volatile ModelUsageReservation modelUsage;
+    private volatile ManagedModelInput managed;
+    private AutoCloseable taskOperation;
 
     AsyncInvocation(
             HostSession session,
@@ -52,11 +58,36 @@ final class AsyncInvocation<E, T> {
             Function<E, ? extends CompletionStage<T>> execute,
             Function<T, Object> project,
             BiFunction<T, Object, T> replace) {
+        this(
+                session,
+                root,
+                tool,
+                name,
+                input,
+                prepare,
+                (id, value) -> execute.apply(value),
+                project,
+                replace);
+    }
+
+    AsyncInvocation(
+            HostSession session,
+            boolean root,
+            boolean tool,
+            String name,
+            Object input,
+            Function<Object, E> prepare,
+            BiFunction<String, E, ? extends CompletionStage<T>> execute,
+            Function<T, Object> project,
+            BiFunction<T, Object, T> replace) {
         this.session = session;
         this.root = root;
         this.tool = tool;
         this.name = name;
-        this.input = JsonValues.freeze(input);
+        this.input =
+                (input instanceof EffectInput || input instanceof ToolInput) && tool && !root
+                        ? input
+                        : JsonValues.freeze(input);
         this.prepare = prepare;
         this.execute = execute;
         this.project = project;
@@ -87,6 +118,7 @@ final class AsyncInvocation<E, T> {
     }
 
     CompletableFuture<T> start() {
+        if (!root && !bridge) taskOperation = session.beginTaskOperation(id);
         session.registerAsync(id, this::abort);
         startTask =
                 new FutureTask<>(
@@ -128,21 +160,34 @@ final class AsyncInvocation<E, T> {
             }
             Object effective = bridge ? input : session.evaluate(pre, id, name, input);
             E prepared = prepare.apply(effective);
+            if (data && prepared instanceof PreparedDataInput<?> bound) effective = bound.target();
+            if (!root
+                    && !bridge
+                    && !tool
+                    && !data
+                    && prepared instanceof MeteredModelInput metered) {
+                modelUsage = metered.usageReservation();
+                if (prepared instanceof ManagedModelInput lifecycle) managed = lifecycle;
+            }
             synchronized (lock) {
                 if (done) {
+                    if (managed != null) managed.closeModelPreparation();
+                    if (modelUsage != null) modelUsage.close();
                     return;
                 }
                 session.checkActive();
                 if (!root && !bridge) {
+                    session.commitAuthority(id, pre, name, effective, prepared);
                     if (data) {
-                        session.commitData();
+                        session.commitData(effective, id);
                     } else {
-                        session.commit(tool);
+                        session.commit(tool, name, effective, prepared);
                     }
                 }
                 started = true;
             }
-            CompletionStage<T> stage = execute.apply(prepared);
+            if (tool && !data && !root && !bridge) session.enterToolAction(id, name);
+            CompletionStage<T> stage = execute.apply(id, prepared);
             if (stage == null) {
                 throw new GovernanceException("missing_async_result");
             }
@@ -213,6 +258,7 @@ final class AsyncInvocation<E, T> {
                 session.checkActive();
                 done = true;
             }
+            if (!root && !bridge && !data) session.completedOperation(tool, name, id);
             cleanup();
             try (var scope = session.bind()) {
                 result.complete(finalValue);
@@ -281,10 +327,16 @@ final class AsyncInvocation<E, T> {
     }
 
     private void cleanup() {
+        if (managed != null) managed.closeModelPreparation();
+        if (modelUsage != null) modelUsage.close();
         session.unregisterAsync(id);
+        session.leaveToolAction(id);
         boolean release;
         boolean leave;
+        AutoCloseable operation;
         synchronized (lock) {
+            operation = taskOperation;
+            taskOperation = null;
             release = reserved && !started;
             reserved = false;
             leave = ownsRun;
@@ -300,6 +352,12 @@ final class AsyncInvocation<E, T> {
         if (leave) {
             session.leaveRun();
         }
+        if (operation != null)
+            try {
+                operation.close();
+            } catch (Exception impossible) {
+                throw new IllegalStateException(impossible);
+            }
     }
 
     private void cancelWork() {

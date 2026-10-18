@@ -1,0 +1,117 @@
+{
+  "verifiedAt": "2026-10-18",
+  "scope": "Trusted logical document publication, immutable manifests, guarded native retrieval, current-version revalidation and durable cross-process provenance",
+  "verification": {
+    "command": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 spotless:apply verify",
+    "javaVersion": 17,
+    "reactorBuild": "SUCCESS",
+    "tests": 697,
+    "passed": 696,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1,
+    "skipReason": "Optional real-provider test is not enabled",
+    "moduleTests": {
+      "core": 133,
+      "provenance": 22,
+      "delegation": 49,
+      "delegationJdbc": 20,
+      "observability": 5,
+      "langchain4j": 255,
+      "springBootStarter": 10,
+      "sandbox": 50,
+      "examplesLive": 153
+    },
+    "frontendChangedOrRebuiltInThisPhase": false
+  },
+  "architecture": {
+    "publication": "JdbcLabelStore delegates to a separate JdbcDocumentCatalog; root document head and full immutable manifest committed together using row lock and expected-version CAS",
+    "identity": "Full host-bound DataResource + documentId + monotonic version + segmentId + actual content digest; AGT-FRAGMENT-V2, original unversioned V1 keys preserved",
+    "trustedBinding": "Explicit host DocumentResolver rather than trusting source metadata; actual TextSegment text is hashed and compared with published manifest",
+    "classification": "Document-level grade cannot decrease across replacement or withdrawal; versioned provenance retains content-level grade; duplicate text across documents joins conservative labels without idempotency collision",
+    "causality": "Versioned classification references manifest and content-level history; derived content events retain original data-action reference",
+    "boundaries": "Current published version checked before retrieval delivery, later action authorization/dispatch, and remote model/tool response checks; shutdown cleanup is not blocked by stale context",
+    "recovery": "Version reference serialized in existing fragment checkpoint and action-bound metadata protocol; fresh JDBC authority retains identity and rejects stale context during subsequent operations",
+    "limits": {
+      "manifestSegments": 2048,
+      "fragmentsPerDataCall": 128,
+      "distinctTaskFragments": 128,
+      "taskSourceReferences": 512
+    },
+    "privacy": "Manifest/work protocol contains IDs, digests, classifications and provenance; no document/query/model response body added"
+  },
+  "catalogTests": {
+    "class": "DocumentCatalogTest",
+    "tests": 6,
+    "cases": [
+      "Durable history, idempotent retry after a later publication, monotonic classification and empty-manifest withdrawal",
+      "Eight independent concurrent fresh publishers: exactly one expected-version success",
+      "Wrong expected version and reused action with changed content rejected without head mutation",
+      "Missing schema and damaged manifest fail closed",
+      "Maximum manifest round-trip; overflow and inconsistent caller container size rejected without truncation",
+      "Caller mutates input while database connection is gated: immutable prepared manifest and original idempotent fingerprint retained"
+    ]
+  },
+  "runtimeTests": {
+    "class": "DocumentVersionTest",
+    "tests": 11,
+    "cases": [
+      "Synchronous/asynchronous original content classification overrides forged source metadata and prevents low-clearance native model dispatch",
+      "Old published version rejected; falsely claiming current version with old text rejected",
+      "Native asynchronous retrieval held while new version publishes: no result delivered",
+      "Publish during model preparation: native model counter remains zero, unused external work safely NOT_STARTED",
+      "Content grade before/after retrieval cannot be washed by adding version reference",
+      "Two same-text results from public/secret documents in one retrieval: valid batch joins SECRET and model dispatch remains zero",
+      "Actual delegated receiver model starts, publishes replacement during native execution, then POST_MODEL_CALL rejects its result as document_version_stale",
+      "Explicit versioned wrapper requires flow and catalog; no silent fallback"
+    ]
+  },
+  "wireTests": {
+    "DocumentFragmentTest": "Two tests cover V1 stability, V2 distinction, JSON numeric round-trip, immutable expected references and invalid shape/type rejection",
+    "FlowProjectionTest": "Strict canonical JSON comparison accepts parsed integer representation without accepting extra body fields"
+  },
+  "independentProcess": {
+    "test": "FragmentRemoteProcessTest.twoSdkJvmsUseActionBoundMetadataOnlyRpcAndDurableFragmentState",
+    "variants": [
+      "Existing unversioned mode",
+      "Explicit document-version mode"
+    ],
+    "topology": "Two independent SDK JVMs per variant, authenticated loopback HTTP status service and file-backed H2 JDBC authority",
+    "assertions": [
+      "Public document reaches native model once",
+      "Sensitive document remains CONFIDENTIAL even when version manifest and forged metadata claim PUBLIC; native model dispatch zero",
+      "Fresh JDBC registry retains fragment identity, grade and original data-action association",
+      "Publishing next version after restore causes parent output to reject stale context",
+      "Captured authorization RPC contains no synthetic document/query/model body"
+    ],
+    "fixtureTiming": "Overall child await allows ten seconds and parent read twenty seconds for multiple bounded RPC/file commits; production one-second RPC and lease constraints unchanged"
+  },
+  "spike": {
+    "candidates": [
+      {
+        "name": "LangChain RecordManager",
+        "license": "MIT",
+        "source": "https://reference.langchain.com/python/langchain-core/indexing/base/RecordManager",
+        "fit": "Index hash/source tracking and synchronization; Python deployment does not replace Java authorization/dispatch integration"
+      },
+      {
+        "name": "Qdrant conditional updates",
+        "license": "Apache-2.0",
+        "source": "https://qdrant.tech/documentation/manage-data/points/",
+        "fit": "Can support host indexing/version conditions; requires vector service or migration and does not provide this SDK trust binding"
+      }
+    ],
+    "decision": "Reuse existing JDBC runtime/catalog and native ContentRetriever integration; no new external service dependency",
+    "validation": "Official interfaces/license reviewed; candidate services were not deployed"
+  },
+  "limitations": [
+    "Trusted ingestion, backend binding and database access control are required; manifest is not injection detection or proof of content authenticity",
+    "Only current published versions allowed; stale tasks must start fresh, contexts are not silently rewritten",
+    "No vector-store/manifest distributed transaction, embedding generation or old-vector deletion",
+    "A check observes catalog state at its boundary, not a lock across remote generation; already delivered bytes and side effects cannot be rolled back",
+    "Unversioned wrappers preserve original semantics and cannot claim logical-version protection",
+    "No tamper-proof audit or database-admin/backup-rollback attestation",
+    "Only H2 and local authenticated HTTP fixtures validated; production database migration, IAM and HA remain open",
+    "Production provider termination, platform checks and P1 injection, side effects, audit, approval and supply-chain work remain active"
+  ]
+}

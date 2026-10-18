@@ -31,6 +31,7 @@ final class GovernedToolExecutor implements ToolExecutor {
     private final ToolExecutor delegate;
     private final boolean typed;
     private final ToolCallbacks callbacks;
+    private final io.agt.core.tools.ToolLease lease;
 
     GovernedToolExecutor(
             AgentControl control,
@@ -43,6 +44,7 @@ final class GovernedToolExecutor implements ToolExecutor {
         this.delegate = delegate;
         this.typed = typed;
         this.callbacks = callbacks;
+        this.lease = control.reviewedTool(toolName);
     }
 
     @Override
@@ -75,9 +77,8 @@ final class GovernedToolExecutor implements ToolExecutor {
             }
             var args = JsonValues.parseObject(request.arguments());
             var actual = new java.util.concurrent.atomic.AtomicReference<ToolExecutionRequest>();
-            return session.operationPrepared(
-                    true,
-                    toolName,
+            return operate(
+                    session,
                     args,
                     effective ->
                             prepare(
@@ -91,13 +92,16 @@ final class GovernedToolExecutor implements ToolExecutor {
                     effective -> {
                         actual.set(effective);
                         callbacks.before(session, effective, context);
+                        checkLease(session);
                         var result = execute.apply(effective);
+                        checkLease(session);
                         callbacks.rawResult(session, effective, context, result);
                         return result;
                     },
                     this::project,
                     (original, effective) -> {
                         var checked = replace(original, effective);
+                        checkLease(session);
                         callbacks.after(session, actual.get(), context, checked);
                         return checked;
                     });
@@ -188,9 +192,8 @@ final class GovernedToolExecutor implements ToolExecutor {
                 throw session.fail(InterventionPoint.PRE_TOOL_CALL, "tool_identity_mismatch");
             }
             var actual = new java.util.concurrent.atomic.AtomicReference<ToolExecutionRequest>();
-            return session.operationAsyncPrepared(
-                    true,
-                    toolName,
+            return operateAsync(
+                    session,
                     JsonValues.parseObject(request.arguments()),
                     effective ->
                             prepare(
@@ -204,6 +207,7 @@ final class GovernedToolExecutor implements ToolExecutor {
                     effective -> {
                         actual.set(effective);
                         callbacks.before(session, effective, context);
+                        checkLease(session);
                         var source = delegate.executeAsync(effective, context);
                         var observed =
                                 new CompletableFuture<ToolExecutionResult>() {
@@ -219,6 +223,7 @@ final class GovernedToolExecutor implements ToolExecutor {
                                         if (error != null) observed.completeExceptionally(error);
                                         else {
                                             session.checkActive();
+                                            checkLease(session);
                                             callbacks.rawResult(session, effective, context, value);
                                             observed.complete(value);
                                         }
@@ -231,6 +236,7 @@ final class GovernedToolExecutor implements ToolExecutor {
                     this::project,
                     (original, effective) -> {
                         var checked = replace(original, effective);
+                        checkLease(session);
                         callbacks.after(session, actual.get(), context, checked);
                         return checked;
                     });
@@ -247,5 +253,39 @@ final class GovernedToolExecutor implements ToolExecutor {
             }
             return CompletableFuture.failedFuture(e);
         }
+    }
+
+    private void checkLease(HostSession session) {
+        if (lease != null) {
+            session.checkActive();
+            lease.validate(session.context());
+        }
+    }
+
+    private <E, T> T operate(
+            HostSession session,
+            Object input,
+            Function<Object, E> prepare,
+            Function<E, T> execute,
+            Function<T, Object> project,
+            java.util.function.BiFunction<T, Object, T> replace) {
+        return lease == null
+                ? session.operationPrepared(
+                        true, toolName, input, prepare, execute, project, replace)
+                : session.reviewedToolOperation(lease, input, prepare, execute, project, replace);
+    }
+
+    private <E, T> CompletableFuture<T> operateAsync(
+            HostSession session,
+            Object input,
+            Function<Object, E> prepare,
+            Function<E, ? extends java.util.concurrent.CompletionStage<T>> execute,
+            Function<T, Object> project,
+            java.util.function.BiFunction<T, Object, T> replace) {
+        return lease == null
+                ? session.operationAsyncPrepared(
+                        true, toolName, input, prepare, execute, project, replace)
+                : session.reviewedToolOperationAsync(
+                        lease, input, prepare, execute, project, replace);
     }
 }

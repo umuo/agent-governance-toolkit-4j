@@ -14,6 +14,18 @@ public interface PolicyEvaluator {
 
     PolicyDecision evaluate(PolicyRequest request);
 
+    default io.agt.core.effects.EffectRule effectRule(String tool) {
+        return null;
+    }
+
+    default String toolBinding(String tool) {
+        return null;
+    }
+
+    default java.util.List<io.agt.core.injection.InjectionCheck> injectionChecks() {
+        return java.util.List.of();
+    }
+
     /**
      * 改写后重新检查硬约束，不再重复改写或请求审批。
      *

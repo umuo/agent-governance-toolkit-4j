@@ -4,6 +4,8 @@ import io.agt.core.GovernanceException;
 import io.agt.core.HostSession;
 import io.agt.core.execution.CommandBackend;
 import io.agt.core.execution.CommandExecution;
+import io.agt.core.execution.ExternalExecution;
+import io.agt.core.execution.TerminationEvidence;
 import io.github.sandboxdemo.api.ReadPolicy;
 import io.github.sandboxdemo.api.SandboxCleanupState;
 import io.github.sandboxdemo.api.SandboxEnvironment;
@@ -211,21 +213,33 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
         session.checkActive();
         var request = request(execution);
         var job = new Job(request, execution, session, nonZeroExit, report);
+        job.external =
+                session.registerExternalExecution(
+                        "SANDBOX_TASK",
+                        () -> {
+                            job.signalCancellation();
+                            return job.stopped;
+                        });
         long timeout = Math.min(policy.timeout().toMillis(), execution.limits().timeoutMillis());
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeout);
-        synchronized (this) {
-            checkOpen();
-            if (!capacity.tryAcquire()) {
-                throw new GovernanceException("sandbox_capacity_exceeded");
+        try {
+            synchronized (this) {
+                checkOpen();
+                if (!capacity.tryAcquire()) {
+                    throw new GovernanceException("sandbox_capacity_exceeded");
+                }
+                jobs.add(job);
+                try {
+                    workers.execute(job);
+                } catch (RejectedExecutionException error) {
+                    jobs.remove(job);
+                    capacity.release();
+                    throw new GovernanceException("sandbox_capacity_exceeded");
+                }
             }
-            jobs.add(job);
-            try {
-                workers.execute(job);
-            } catch (RejectedExecutionException error) {
-                jobs.remove(job);
-                capacity.release();
-                throw new GovernanceException("sandbox_capacity_exceeded");
-            }
+        } catch (RuntimeException refused) {
+            job.external.finished(TerminationEvidence.NOT_STARTED);
+            throw refused;
         }
         try {
             while (true) {
@@ -319,6 +333,8 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
         private Thread thread;
         private boolean started;
         private volatile SandboxExecution handle;
+        private ExternalExecution external;
+        private final CompletableFuture<TerminationEvidence> stopped = new CompletableFuture<>();
 
         private Job(
                 SandboxRequest request,
@@ -333,7 +349,12 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
             this.nonZeroExit = nonZeroExit;
         }
 
-        synchronized void cancel() {
+        void cancel() {
+            external.requestCancellation();
+            signalCancellation();
+        }
+
+        synchronized void signalCancellation() {
             cancelled = true;
             if (started) {
                 quarantined = true;
@@ -357,6 +378,7 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
                         throw new GovernanceException("sandbox_cancelled");
                     }
                     session.checkActive();
+                    external.started();
                     started = true;
                 }
                 handle = client.start(request, sdkWorkers);
@@ -438,6 +460,16 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
                     // 池线程可能立即用于另一任务；晚到取消不能中断下一次执行。
                     thread = null;
                 }
+                var proof =
+                        handle == null
+                                ? (started
+                                        ? TerminationEvidence.UNKNOWN
+                                        : TerminationEvidence.NOT_STARTED)
+                                : handle.cleanup().confirmed()
+                                        ? TerminationEvidence.CONFIRMED
+                                        : TerminationEvidence.WORKER_ONLY;
+                external.finished(proof);
+                stopped.complete(proof);
                 jobs.remove(this);
                 capacity.release();
             }

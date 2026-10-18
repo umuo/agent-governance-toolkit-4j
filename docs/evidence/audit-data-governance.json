@@ -1,0 +1,131 @@
+{
+  "verifiedAt": "2026-10-18",
+  "scope": "Optional SDK audit event scope, selected/redacted body capture, encrypted JDBC audit, independently witnessed monotonic chain, scoped access audit and payload expiry; not a production WORM or IAM certification",
+  "verification": {
+    "javaVersion": 17,
+    "command": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 spotless:apply verify",
+    "frontendChangedOrRebuiltInThisPhase": false,
+    "focused": {
+      "command": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 -pl agt-langchain4j,agt-observability -am spotless:apply verify -Dtest=AuditCaptureTest,JdbcAuditVaultTest,AuditRuntimeTest,AuditProcessTest,AuditCryptoTest,AuditAdapterTest,AgentTracerTest -Dsurefire.failIfNoSpecifiedTests=false",
+      "build": "SUCCESS",
+      "tests": 36,
+      "passed": 36,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "moduleTests": {
+        "core": 7,
+        "auditJdbc": 20,
+        "observability": 6,
+        "langchain4j": 3
+      }
+    },
+    "documentation": {
+      "command": "python3 -m mkdocs build --strict",
+      "build": "SUCCESS",
+      "output": "Temporary local directory, no publication",
+      "notes": "Three older anchor-link INFO messages remain outside the new guide"
+    },
+    "reactorBuild": "SUCCESS",
+    "tests": 807,
+    "skipped": 1,
+    "passed": 806,
+    "failures": 0,
+    "errors": 0,
+    "skipReason": "Optional real-provider test is not enabled",
+    "moduleTests": {
+      "core": 173,
+      "auditJdbc": 20,
+      "effectsJdbc": 21,
+      "provenance": 22,
+      "delegation": 59,
+      "delegationJdbc": 20,
+      "observability": 6,
+      "langchain4j": 273,
+      "springBootStarter": 10,
+      "sandbox": 50,
+      "examplesLive": 153
+    }
+  },
+  "collection": {
+    "default": "Metadata only, AuditBodyPolicy.NONE; no traversal of the original target in disabled mode",
+    "scope": "HostSession supplies real tenantId/principalId/taskId/sessionId; body claims and trace identifiers do not define authorization",
+    "selection": "Explicit intervention points and top-level fields, separate text opt-in, recursively applied custom exclusions",
+    "redaction": "Unicode NFKC field normalization, credential/header/cookie exclusions, Bearer/API-key/credential-assignment patterns and parsing embedded JSON text",
+    "omission": "Input, projection or UTF-8 storage limits omit the whole body with a machine reason; no incomplete unredacted prefix",
+    "limits": "Input <=1048576 characters, stored body <=65536 bytes, <=64 selected/excluded fields; lifecycle bodies refused",
+    "semantics": "Original/effective intervention-target projection is captured, not raw Provider HTTP wire data; business input/result is not rewritten by audit capture",
+    "privacyLimit": "Pattern masking is not universal secret or PII detection; host selection/classification remains required"
+  },
+  "coreIntegration": {
+    "sink": "AuditSink remains functional for legacy record lambdas; default event method refuses collected body when the sink cannot accept an event",
+    "snapshot": "AgentControl freezes the declared body policy at construction",
+    "failure": "Audit write or witness failure poisons runtime admission; pre-tool audit failure prevents business callback",
+    "otel": "AgentTracer.correlate forwards scope/eventId/body/bodyPolicy and close while attaching actual execution context"
+  },
+  "storage": {
+    "encryption": "JDK JCA AES-256-GCM with fresh 96-bit random nonce and 128-bit tag; separate metadata/body AAD binds catalog, stream, sequence, event id, key id, kind, retention and fingerprint",
+    "integrity": "HMAC-SHA256 using a distinct key authenticates catalog, head and linked event headers/ciphertext digests",
+    "keys": "Host supplies reviewed versioned keys; only key ids stored in database; old versions remain necessary for historical verification",
+    "bounds": "<=10000 entries per subject stream, <=64MiB retained ciphertext configured cap, 64KiB SDK-write reserve for administrative events, JDBC statement timeout 1..30s",
+    "algorithmScope": "Standard algorithms used directly; not a cryptographic protocol certification or vendor KMS/HSM verification"
+  },
+  "witness": {
+    "required": true,
+    "protocol": "Independent AuditWitness CAS accepts genesis or exactly one higher sequence; configured catalog/subject stream and hash must match",
+    "acknowledgment": "Primary transaction commit plus witness confirmation precedes successful append/record or body delivery",
+    "recovery": "Normal protocol permits at most one committed but unwitnessed event; verified pending entry is published without reexecuting a model/tool",
+    "rollback": "Main-store valid old-prefix rollback is refused against newer witness; missing witness and witness lag greater than one are refused rather than silently reset",
+    "idempotency": "Same eventId only reuses exactly matching original content, even after expiry; different content is refused",
+    "trustBoundary": "Production witness needs independent credentials/storage/delete permissions; controlling both databases and publisher keys is outside the guarantee"
+  },
+  "accessAndRetention": {
+    "metadata": "governance:audit:read, same authenticated tenant/principal only; no arbitrary target-tenant/principal parameter",
+    "body": "Both read and governance:audit:body, same subject stream, unexpired content only",
+    "purge": "governance:audit:purge only for already expired ciphertext in own stream",
+    "accessAudit": "ACCESS event must be committed and witnessed before metadata/body is returned; read body failure does not return already internally decrypted content",
+    "expiry": "Body and complete-record lifetimes differ and are authenticated; authorized accesses/purge anchor observed time so rollback does not revive expired data",
+    "purgeSemantics": "Payload ciphertext erased, RETENTION event added; integrity headers, hashes, opaque event ids/type/times retained and still verifiable",
+    "remaining": "No automatic cleanup daemon, complete header archive/prune protocol, backup destruction or independent crypto-erasure of old encryption keys"
+  },
+  "independentProcessEvidence": [
+    {
+      "test": "AuditProcessTest.twoSdkJvmsShareDurableEncryptedChainAndIndependentWitnessAcrossStorageRestart",
+      "workerJvms": 2,
+      "legitimateBusinessHttpCalls": 2,
+      "witnessedSdkEventsBeforeRead": 10,
+      "restart": "H2 TCP storage restarted, fresh vault retained exact checkpoint; authorized metadata omitted body and body reader recovered selected projection"
+    },
+    {
+      "test": "AuditProcessTest.killedAfterPreAuditCommitCannotRunBusinessAndNextJvmRepairsPendingWitness",
+      "fault": "Worker forcibly terminated after PRE_TOOL audit primary commit and before witness confirmation",
+      "businessHttpCallsBeforeKill": 0,
+      "businessHttpCallsAfterNewWorker": 1,
+      "witnessedSdkEventsAfterRecovery": 7,
+      "recovery": "New worker validated/published pending audit event before its own normal SDK operation; no replay of killed business callback"
+    }
+  ],
+  "processEnvironment": {
+    "transport": "Loopback HTTP, separate primary/witness H2 logical databases, independent SDK JVMs",
+    "databaseVersion": "H2 2.4.240",
+    "credentials": "Synthetic keys/database/HTTP credentials via stdin only, not argv or public evidence",
+    "isolationLimit": "Both logical databases use the same local test TCP server; production independent administrator domains, IAM and failure isolation are not certified"
+  },
+  "testClasses": {
+    "AuditCaptureTest": "Legacy metadata-only compatibility, scope forgery resistance, immutable policy, opt-in text, nested/Unicode/custom redaction, bounds and incorrect legacy sink refusal",
+    "JdbcAuditVaultTest": "Encrypted reopen, scoped permissions, separate TTL/purge, ciphertext/header/date/delete tampering, authentic-prefix rollback, commit/ack loss, witness reset/rollback, key rotation, concurrent creation, deterministic stale-missing-head race, byte budget and policy binding",
+    "AuditRuntimeTest": "Actual core tool admission and access-audit-before-body-delivery failures",
+    "AuditProcessTest": "Two independent SDK JVMs, storage restart and kill-at-committed-pre-audit fault",
+    "AuditCryptoTest": "JCA AEAD roundtrip, AAD rejection, ciphertext corruption and distinct sampled nonces",
+    "AuditAdapterTest": "Actual native model and supported native sync/async tool, unchanged business values and redacted storage",
+    "AgentTracerTest": "Contextual sink/capture/close forwarding plus existing OTel correlation regressions"
+  },
+  "notVerified": [
+    "Production identity, cross-principal administration, approver authentication or separation of duties",
+    "Production KMS/HSM, key usage limits, certified key destruction or key rewrap/migration",
+    "Independent production witness deployment or WORM guarantees; Trillian/Tessera/immudb services not deployed",
+    "Other SQL database dialects, high-volume performance, HA/failover/disaster recovery and complete archive/prune lifecycle",
+    "Teaching TraceStore snapshot migration, browser body access management and third-party provider logs",
+    "Generic prevention against a compromised trusted publisher, both storage administrators plus key access, or all PII/encoded secret formats"
+  ]
+}

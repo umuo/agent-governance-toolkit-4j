@@ -1,0 +1,159 @@
+{
+  "verifiedAt": "2026-10-18",
+  "scope": "Optional version-bound injection detection, conservative request origins, bounded failure handling and strict output delivery; not a classifier accuracy certification",
+  "verification": {
+    "fullReactorCommand": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 spotless:apply verify",
+    "javaVersion": 17,
+    "reactorBuild": "SUCCESS",
+    "tests": 733,
+    "passed": 732,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1,
+    "skipReason": "Optional real-provider test is not enabled",
+    "moduleTests": {
+      "core": 158,
+      "provenance": 22,
+      "delegation": 53,
+      "delegationJdbc": 20,
+      "observability": 5,
+      "langchain4j": 262,
+      "springBootStarter": 10,
+      "sandbox": 50,
+      "examplesLive": 153
+    },
+    "frontendChangedOrRebuiltInThisPhase": false,
+    "finalStateFollowUp": {
+      "reason": "Final monotonic detection wait placement adjusted after full regression: authoritative preflight completes before enqueue; queue and execution use the remaining monotonic deadline",
+      "command": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 -pl agt-langchain4j -am spotless:apply verify -Dtest=InjectionGovernanceTest,LlmGuardDetectorTest,InjectionDelegationTest,InjectionAdapterTest -Dsurefire.failIfNoSpecifiedTests=false",
+      "build": "SUCCESS",
+      "tests": 36,
+      "passed": 36,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "policy": {
+    "declaration": "Optional InjectionCheck id, detector, reviewed revision, points, timeout, character cap and DENY/WARN behavior; max 16 checks",
+    "binding": "AgentControl validates required implementation and version before serving; freezes one immutable declaration snapshot",
+    "signature": "Declarations enter original policy digest; removing checks or weakening DENY to WARN changes fingerprint and receiver admission is denied",
+    "legacy": "Empty check declarations excluded from fingerprint, preserving the legacy policy digest",
+    "decisions": "CLEAR cannot grant permissions or elevate trust; UNKNOWN never becomes CLEAR; errors/unknown/limits use explicit fault behavior",
+    "order": "Deterministic hard denial precedes external detection; scan original then transformed effective payload; approval does not override detector refusal"
+  },
+  "boundedRuntime": {
+    "threads": 2,
+    "queued": 32,
+    "timeoutRangeMillis": [
+      1,
+      30000
+    ],
+    "characterCapMaximum": 1048576,
+    "timing": "Queue/execution share monotonic deadline, bounded by session remainder; authorization preflight remains under existing task/RPC constraints",
+    "cancellation": "Session revocation stops waiting and requests interruption; ignored interruptions retain actual worker slots, without expansion; late CLEAR does not revive failed work",
+    "isolation": "Trusted Java plugins, not a sandbox; no remote classifier termination proof or automatic classifier billing ledger"
+  },
+  "sourceMarkers": {
+    "derivedFrom": "Actual intervention point and registered tool/resource handle; body claims and stored SYSTEM roles do not promote trust",
+    "categories": [
+      "USER_INPUT/UNTRUSTED",
+      "MODEL_CONTEXT/MIXED",
+      "MODEL_RESULT/MODEL_GENERATED",
+      "TOOL_ARGUMENTS/MIXED",
+      "TOOL_RESULT/UNTRUSTED",
+      "RETRIEVAL_RESULT/UNTRUSTED",
+      "MEMORY_RESULT/UNTRUSTED",
+      "DATA_INPUT/MIXED",
+      "CALLER_OUTPUT/MIXED"
+    ],
+    "controlFields": "Outer data resource identity, operation and fragment fields removed from scanner content; source metadata retains opaque handle digest",
+    "limits": "Request-bound origins, not byte-level trust propagation or source authenticity proof"
+  },
+  "httpAdapter": {
+    "protocol": "LLM Guard official POST /analyze/prompt; send only prompt field",
+    "transport": "Fixed HTTPS endpoint, host Bearer supplier, no redirects; literal-loopback HTTP only through explicit testing factory",
+    "body": "Full response deadline includes body after headers; bounded 65536 bytes; strict JSON and UTF-8",
+    "validation": "Exact response fields, exactly PromptInjection scanner, Boolean verdict, original input echo, official [-1,1] risk range and consistent validity; unknown or inconsistent responses never clear",
+    "score": "Relative service threshold risk mapped to [0,1], not a probability; sanitized content is never applied"
+  },
+  "tests": {
+    "InjectionGovernanceTest": {
+      "count": 14,
+      "covers": [
+        "Missing/mismatched provider binding",
+        "Suspect blocks native dispatch and audits no body",
+        "Explicit error DENY/WARN and UNKNOWN handling",
+        "Rewrite scanned again before execution",
+        "Hard authorization/content denial precedes external scan",
+        "Ignored interruption and late-clear timeout",
+        "Shared worker count remains two across roots",
+        "Session revocation stops detection and native dispatch",
+        "Strict bounded YAML declaration",
+        "Input cap rejects or warns without partial scan",
+        "EVALUATE_ONLY reports suspect but cannot export signed authorization",
+        "Custom mutable evaluator cannot alter frozen strict-output declaration"
+      ]
+    },
+    "LlmGuardDetectorTest": {
+      "count": 11,
+      "covers": [
+        "Actual authenticated loopback HTTP and exact prompt-only wire shape",
+        "Negative official risk semantics",
+        "Missing scanner, wrong types and inconsistent scores",
+        "Changed input echo cannot certify original text",
+        "No redirect or content forwarding",
+        "Stalled body after response headers times out",
+        "Oversized/duplicate JSON cannot clear",
+        "Production TLS/fixed-path validation"
+      ]
+    },
+    "InjectionDelegationTest": {
+      "count": 4,
+      "covers": [
+        "Receiver cannot remove checks",
+        "Receiver cannot weaken fault behavior",
+        "Accepted receiver detector actually prevents native model execution",
+        "Legacy no-detector digest remains identical"
+      ]
+    },
+    "InjectionAdapterTest": {
+      "count": 7,
+      "covers": [
+        "Synchronous/asynchronous RAG result blocks before model call",
+        "Forged document owner does not promote source trust",
+        "CLEAR does not elevate tool permission",
+        "Stored SYSTEM message remains untrusted MEMORY_RESULT",
+        "Native tool executes once but injected return cannot reach model",
+        "Real-time native AI Service rejected before provider dispatch when output detection enabled",
+        "Strict model stream rejected without any partial or complete content delivery"
+      ]
+    }
+  },
+  "audit": "Only machine codes, hashed check/provider identifiers, reviewed-version binding, origin/trust and stage markers added; no detector body, raw provider exception or free-text explanation. Marker CLEAR refers to a check, not all-check safety.",
+  "spike": {
+    "sources": [
+      "https://github.com/protectai/llm-guard/blob/main/docs/input_scanners/prompt_injection.md",
+      "https://github.com/protectai/llm-guard/blob/main/llm_guard_api/app/schemas.py",
+      "https://github.com/protectai/llm-guard/blob/main/llm_guard_api/app/app.py",
+      "https://github.com/protectai/llm-guard/blob/main/llm_guard/util.py",
+      "https://github.com/NVIDIA-NeMo/Guardrails"
+    ],
+    "licenses": {
+      "LLMGuard": "MIT",
+      "NeMoGuardrails": "Apache-2.0"
+    },
+    "decision": "Reuse an optional HTTP classifier protocol and trusted SPI rather than porting models or adding a second orchestration runtime",
+    "validation": "Official source/API/license reviewed; release-maintenance metadata endpoint was unavailable, so current support cadence is not certified; no model weights downloaded or production classifier deployed"
+  },
+  "limitations": [
+    "No production neural classifier quality, model-weight/license review, multilingual robustness or long-input coverage benchmark verified",
+    "Character bounds do not prove tokenizer coverage; service matching/truncation policy must be reviewed",
+    "WARN and EVALUATE_ONLY are explicit availability/evaluation choices, not evidence of blocked injection",
+    "Signed configuration requires trusted receiver deployment; not remote proof that a compromised host ran its claimed plugin/model",
+    "External detector receives selected content; host controls privacy approval, service authentication, logs and retention",
+    "No arbitrary Java thread sandboxing, classifier remote-stop proof or automatic classifier cost budget",
+    "Post-tool detection cannot roll back already executed side effects",
+    "P0 production identity/platform/storage gates and P1 side effects, durable audit, approval and supply-chain work remain active"
+  ]
+}

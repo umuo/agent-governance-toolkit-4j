@@ -28,7 +28,7 @@
 | `sessionId` | 治理会话 | HostSession |
 | `actionId` | 具体治理动作 | 现有运行时 |
 
-`ExecutionContext` 不是权限凭据。派生关系不授予子 Agent 父级权限；示例给研究子 Agent `read`、核验子 Agent `send`，分别打开治理会话，预算也独立。外部传入关联头不能作为认证、租户隔离、审批或权限依据。
+`ExecutionContext` 不是权限凭据。Trace 派生关系本身不授予子 Agent 父级权限；当前演示通过宿主显式父子会话给研究子 Agent `read`、核验子 Agent `send`，权限分别收窄，调用总量由根任务共享预算约束。外部传入关联头不能作为认证、租户隔离、审批或权限依据。
 
 ## SDK 接入顺序
 
@@ -65,7 +65,7 @@ tracer.invokeAgent("coordinator", () -> {
 
 跨进程发送时 `tracer.inject(headers)` 写标准 `traceparent` / `tracestate`，另写 `agt-parent-run-id` 以关联 Agent 调用归属；接收方 `try (var scope = tracer.extract(headers).makeCurrent())` 后调用 `invokeAgent`。W3C 头负责 Span 父子关系，额外字段仅是关联元数据；不透传用户、权限或凭据。无效 W3C 上下文不会继承远端 run。关联头不是签名，认证入口应按信任边界决定接受或移除，不能据此相信消息来源。
 
-单个 Span 只有一个父节点。多个上游汇合或跨 trace 的长任务需在宿主侧使用 OTel Span Links / 业务 workflow ID；当前桥接没有实现持久任务调度、跨进程取消、权限委托或分布式预算。传播辅助方法有回归测试，本机演示没有假称验证两台真实服务或消息中间件。
+单个 Span 只有一个父节点。多个上游汇合或跨 trace 的长任务需在宿主侧使用 OTel Span Links / 业务 workflow ID；当前桥接没有实现持久任务调度、跨进程取消、跨进程权限委托或分布式预算；显式本机委托与共享调用预算见 [安全补齐计划](security-hardening-plan.md)。传播辅助方法有回归测试，本机演示没有假称验证两台真实服务或消息中间件。
 
 ## 演示流程与页面
 

@@ -1,6 +1,9 @@
 package io.agt.examples.live.web.asi02;
 
 import dev.langchain4j.agent.tool.Tool;
+import io.agt.core.BudgetLimits;
+import io.agt.core.TaskLimits;
+import io.agt.core.flow.*;
 import io.agt.core.policy.StructuredPolicy;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,10 +34,36 @@ public final class ToolChainCase implements CaseStudy {
                         Rules.tool(
                                 Map.of(
                                         "endpointId",
-                                        Rules.choice("internal-demo"),
+                                        Rules.choice("internal-demo", "external-demo"),
                                         "body",
                                         Rules.text())))
                 .build();
+    }
+
+    public TaskLimits taskLimits() {
+        return new TaskLimits(
+                new BudgetLimits(20, 50, 300000),
+                1000,
+                10,
+                4,
+                new DataFlowPolicy(
+                        Map.of(),
+                        Map.of("readInternalNote", DataLabel.CONFIDENTIAL),
+                        Map.of(
+                                "postWebhook",
+                                new DataFlowPolicy.SinkRule(
+                                        DataLabel.CONFIDENTIAL,
+                                        "endpointId",
+                                        Map.of(
+                                                "internal-demo",
+                                                DataLabel.CONFIDENTIAL,
+                                                "external-demo",
+                                                DataLabel.PUBLIC),
+                                        java.util.Set.of())),
+                        java.util.Set.of(),
+                        DataLabel.PUBLIC,
+                        DataLabel.CONFIDENTIAL,
+                        DataLabel.CONFIDENTIAL));
     }
 
     public Map<String, Object> snapshot() {

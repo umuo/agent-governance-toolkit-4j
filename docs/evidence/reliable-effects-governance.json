@@ -1,0 +1,136 @@
+{
+  "verifiedAt": "2026-10-18",
+  "scope": "Host-bound business intent, persistent effect journal, native tool admission, result reconciliation and separately authorized compensation; not universal exactly-once execution",
+  "verification": {
+    "javaVersion": 17,
+    "fullReactorCommand": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 spotless:apply verify",
+    "frontendChangedOrRebuiltInThisPhase": false,
+    "documentation": {
+      "command": "python3 -m mkdocs build --strict",
+      "build": "SUCCESS",
+      "output": "Temporary local directory only; no publish",
+      "network": "Existing Mermaid CDN URL checked with network access",
+      "notes": "Existing INFO messages about three older anchor links remain; no new guide link warnings"
+    },
+    "reactorBuild": "SUCCESS",
+    "tests": 772,
+    "passed": 771,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1,
+    "skipReason": "Optional real-provider test is not enabled",
+    "moduleTests": {
+      "core": 166,
+      "effectsJdbc": 21,
+      "provenance": 22,
+      "delegation": 59,
+      "delegationJdbc": 20,
+      "observability": 5,
+      "langchain4j": 266,
+      "springBootStarter": 10,
+      "sandbox": 50,
+      "examplesLive": 153
+    },
+    "finalStateFollowUp": {
+      "reason": "Move native checked-completion callbacks inside core governance before successful step registration, and recheck session after observer completion",
+      "command": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 -pl agt-langchain4j -am spotless:apply verify -Dtest=EffectJournalTest,EffectTargetTest,JdbcEffectLedgerTest,EffectProcessTest,EffectToolTest,EffectDelegationTest,NativeCallbackCompatibilityTest,NativeCompensationTest,TaskBudgetTest -Dsurefire.failIfNoSpecifiedTests=false",
+      "build": "SUCCESS",
+      "tests": 65,
+      "passed": 65,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "featureTests": 43,
+      "existingCompatibilityAndBudgetTests": 22,
+      "moduleTests": {
+        "core": 14,
+        "effectsJdbc": 21,
+        "delegation": 6,
+        "langchain4j": 24
+      }
+    }
+  },
+  "identity": {
+    "intent": "Authenticated host business workflow supplies stable intentId, expectedState and optional forward receipt; model tool call id is never the business idempotency key",
+    "key": "tenantId + principalId + namespace + intentId, with separate FORWARD/COMPENSATION phases",
+    "requestDigest": "Actual registered tool, effective parameters, schema, expected state and parent proof are pinned for the intent",
+    "backendToken": "Stable intent/phase digest independent of agent, task, session, model call id and journal deployment identity",
+    "catalog": "Policy binds the reviewed persistent ledger identity; normal starts must compare configured identity, not silently bootstrap a replacement",
+    "delegation": "Effect rules enter the signed policy fingerprint; removing or changing namespace, schema, phase or catalog is refused; old tool policies without effects retain legacy fingerprint"
+  },
+  "stateMachine": {
+    "preparedExpiry": "No dispatch was admitted: NOT_APPLIED permits same-payload retry with increased attempt and new private lease",
+    "runningExpiry": "Dispatch may have applied: UNKNOWN is durable and never becomes a retry because of TTL, restart or clock rollback",
+    "committed": "Read-only backend recovery verifies receipt and stored original-result digest; permissions, approval and post checks still run",
+    "notApplied": "Retry needs trusted non-application evidence; a missing backend record alone is insufficient",
+    "lateReceipt": "An original private capability can complete its own UNKNOWN attempt; late confirmation does not revive a revoked root or deliver its result",
+    "postFailure": "A post-policy denial or response delivery failure cannot erase a business COMMITTED record",
+    "limits": "Lease <= min(300000ms, session remainder), checkpoint <= 1MiB, review records <= 128, JDBC statement timeout 1..30 seconds"
+  },
+  "backendContract": {
+    "atomicityRequired": "Business backend must atomically validate expected state, entity access, idempotency token/request digest and attempt fence with business commit and stored receipt",
+    "noDistributedTransaction": "SDK journal commit and business commit are separate; ordinary callback errors or HTTP timeouts imply UNKNOWN, not rollback",
+    "absenceReconciliation": "Before asserting NOT_APPLIED, a trusted backend must fence/tombstone delayed older attempts; provider-specific fencing is not certified by these tests",
+    "result": "Bounded immutable JSON at core boundary; native tool adapter currently requires String result",
+    "interruptHandling": "Known receipt persistence temporarily clears an existing cancellation interrupt and restores it afterward; failed storage still requires reconciliation"
+  },
+  "authorizationAndApproval": {
+    "requiredMarker": "A policy-required effect cannot be executed through ordinary core/native tool wrappers; low-level coordinator also requires the real admitted SDK action",
+    "mode": "Required effects refuse execution in EVALUATE_ONLY rather than silently bypassing reliability",
+    "approvalTarget": "PolicyRequest.effect carries host intent, state, phase, schema, catalog and compensation parent; target digest enters approval action identity and survives parameter rewrite",
+    "management": "Same tenant/principal and explicit governance:effects:inspect or governance:effects:reconcile; TrustedContext itself is not token authentication",
+    "compensation": "Separate tool, permission, normal approval and exact committed forward proof; its own phase is idempotent and may become UNKNOWN; no automatic remote rollback",
+    "completionCallbacks": "Checked native completion observers execute inside the core boundary before successful step registration; observer failure or session revocation cannot deliver success, while business COMMITTED proof remains recoverable"
+  },
+  "jdbc": {
+    "verifiedDatabase": "H2 2.4.240, Java 17",
+    "coordination": "Per-intent row lock, metadata-only bounded transaction retries, stable catalog id and strict bounded checkpoint decoding",
+    "stored": "Status, attempt, expiry, opaque owner ids, request/result digests, private lease hash and opaque receipt/review ids; no raw tool payload or complete result",
+    "integrity": "Checksum detects accidental corruption, not a database administrator rewriting state",
+    "productionLimits": "No production database dialect, pooling timeout, HA, backup/restore or malicious administrator certification"
+  },
+  "realProcessExperiments": [
+    {
+      "test": "EffectProcessTest.separateJvmRecoversBackendReceiptWithoutMutatingAgain",
+      "transport": "Independent SDK JVMs, authenticated loopback HTTP business service and H2 TCP",
+      "businessChanges": 1,
+      "executeRequests": 1,
+      "readOnlyRecoveries": 1,
+      "journalOutcome": "COMMITTED"
+    },
+    {
+      "test": "EffectProcessTest.killAfterActualBackendCommitCannotReplayUntilTrustedReconciliation",
+      "fault": "Backend transaction commits; HTTP response is held; owned worker JVM is forcibly terminated",
+      "clock": "Explicit test clock advances past lease expiry, then rolls back",
+      "beforeReview": "New independent JVM returns effect_outcome_unknown without another execute request",
+      "review": "Trusted host reads actual durable backend receipt and records matching attempt reconciliation",
+      "afterReview": "New JVM only recovers original result",
+      "businessChanges": 1,
+      "executeRequests": 1,
+      "readOnlyRecoveries": 1
+    },
+    {
+      "test": "EffectProcessTest.secondJvmCannotDispatchWhileFirstBackendResponseIsPending",
+      "beforeRelease": "Second JVM returns effect_in_progress",
+      "afterRelease": "Original completes and later independent JVM recovers",
+      "businessChanges": 1,
+      "executeRequests": 1
+    }
+  ],
+  "focusedTestClasses": {
+    "EffectJournalTest": "Private lease ownership, preparation expiry, unknown restart, fingerprint pinning, proof conflicts, explicit compensation, review identity and corrupt restore",
+    "EffectTargetTest": "Approval business identity retained across parameter rewrite, target changes alter digest",
+    "JdbcEffectLedgerTest": "Concurrent multi-instance claim, persistent unknown/clock rollback, access isolation, corrupt checkpoint, approval on replay, wrapper bypass, CAS race, response loss, post denial, compensation, recovery digest, cancellation races, lost commit acknowledgment and observation mode",
+    "EffectDelegationTest": "Five signed binding replacement refusals and legacy non-effect tool fingerprint compatibility",
+    "EffectToolTest": "Eight native cases: sync/async wrappers, plain wrapper refusal, actual AiService loop, and sync/async checked-callback exception/revocation with safe later recovery",
+    "EffectProcessTest": "Three independent JVM/HTTP/durable business receipt experiments"
+  },
+  "notVerified": [
+    "Production business provider authentication, payment/message vendor idempotency, receipt authenticity or fence semantics",
+    "Production IAM, approver identity integration, separation of duties and durable human approval",
+    "Exactly-once execution for arbitrary Java callbacks, unwrapped tools or external APIs",
+    "Persistent node outbox, cross-database atomic commit, reliable audit transport, retention/encryption or tamper-proof storage",
+    "Production database dialect, high availability, failover, disaster recovery and safe effect-record cleanup",
+    "Browser UX for effect management or live-provider execution; no frontend changes in this phase"
+  ]
+}

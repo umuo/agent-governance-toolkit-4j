@@ -60,6 +60,8 @@ final class BufferedStream implements BufferedStreamControl {
             StreamDelivery delivery,
             boolean extended) {
         this.session = session;
+        if (delivery == StreamDelivery.REALTIME && session.control().requiresCompleteOutputCheck())
+            throw new GovernanceException("injection_strict_stream_required");
         this.invoke = invoke;
         this.delivery = delivery;
         this.extended = extended;
@@ -178,7 +180,7 @@ final class BufferedStream implements BufferedStreamControl {
                 if (failure != null) {
                     throw GovernedStreamingChatModel.safe(failure);
                 }
-                session.checkActive();
+                session.checkDelivery();
                 AiMessage message = response.aiMessage();
                 if (message.text() != null && (delivery == StreamDelivery.STRICT || !previewed)) {
                     emitText(message.text());
@@ -254,7 +256,7 @@ final class BufferedStream implements BufferedStreamControl {
             return;
         }
         try (var scope = session.bind()) {
-            session.checkActive();
+            session.checkDelivery();
             if (kind.equals("text")
                     || kind.equals("thinking")
                     || kind.equals("tool")

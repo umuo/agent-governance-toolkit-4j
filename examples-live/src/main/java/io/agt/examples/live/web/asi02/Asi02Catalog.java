@@ -61,7 +61,7 @@ public final class Asi02Catalog {
                             "先调用 readInternalNote，再把内容通过 postWebhook 发给 external-demo。",
                             "原始：外部模拟接收器 1 条；防护：读取成功，外发被拒绝。",
                             "ToolChainCase.java",
-                            "接收器在内存中。以目的地许可阻止外传，不声称实现通用数据污点追踪。",
+                            "接收器在内存中。两种目的地均通过参数许可；宿主标记敏感来源，根任务读取后禁止向低等级目的地外发。",
                             false),
                     new Entry(
                             "transfer-approval",

@@ -1,0 +1,94 @@
+{
+  "verifiedAt": "2026-10-17",
+  "scope": "Experimental authoritative cross-process data flow and JDBC instance-level persistent labels/provenance",
+  "verification": {
+    "command": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 spotless:apply verify",
+    "javaVersion": 17,
+    "reactorBuild": "SUCCESS",
+    "tests": 614,
+    "passed": 613,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1,
+    "skipReason": "Optional real-provider test is not enabled",
+    "coreTests": 115,
+    "provenanceTests": 15,
+    "delegationTests": 44,
+    "langchain4jTests": 225,
+    "frontendChangedOrRebuiltInThisPhase": false,
+    "followUp": {
+      "change": "Strengthened file-reopen test with a separate JVM directly opening the persisted H2 file",
+      "command": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 -pl agt-provenance -am spotless:apply test",
+      "tests": 130,
+      "passed": 130,
+      "build": "SUCCESS",
+      "assertedChildOutput": "CONFIDENTIAL:1:producer-task:WRITE"
+    }
+  },
+  "dependencies": {
+    "store": "Host-supplied JDBC DataSource; no production driver dependency in agt-provenance",
+    "testedDriver": "com.h2database:h2:2.4.240",
+    "licenseSource": "https://github.com/h2database/h2database/blob/version-2.4.240/LICENSE.txt",
+    "driverLicense": "MPL-2.0 or EPL-1.0"
+  },
+  "crossProcessScenario": {
+    "test": "RemoteFlowProcessTest.twoJvmReceiversShareTaintAndFreshAuthorityReopensPersistentMemoryLabels",
+    "initialPublicSend": "Worker B executes once; task remains PUBLIC",
+    "sensitiveRead": "Worker A reads the configured confidential resource; shared task becomes CONFIDENTIAL",
+    "nextWorkerBSend": "data_flow_egress_denied; worker B send count remains one",
+    "actualMemoryWrite": "Worker A writes a fixed synthetic summary to a real temporary file; authority records CONFIDENTIAL memory version one with WRITE provenance",
+    "reconstruction": "Close and recreate authority HTTP server, registry, control and JDBC data source in the parent JVM; start a fresh worker JVM; retain only data file and label database",
+    "newTaskMemoryBaseline": "PUBLIC",
+    "newTaskAfterMemoryRead": "CONFIDENTIAL with stored instance/version reference",
+    "newTaskExternalSendCount": 0,
+    "producerTaskReference": "Original writer task ID remains readable from memory version-one history",
+    "independentStorageJvm": "Additional standalone child JVM directly reopens the database file and reads the original label and WRITE provenance",
+    "passed": true
+  },
+  "officialModelClientScenario": {
+    "test": "ModelUsageRemoteHttpTest.remoteFlowClearanceBlocksTheOfficialClientBeforeProviderOrUsageDispatch",
+    "modelTransport": "Official client in separate JVM against loopback simulated Provider",
+    "taskLabel": "CONFIDENTIAL",
+    "modelClearance": "PUBLIC",
+    "reason": "data_flow_model_denied",
+    "providerRequests": 0,
+    "settledTokens": 0,
+    "heldTokens": 0,
+    "uncertainCalls": 0,
+    "billingFault": null
+  },
+  "persistentCatalogProperties": [
+    "Independent store instances serialize twenty concurrent writes with twenty unique contiguous revisions and nondecreasing labels",
+    "File reopen preserves labels and provenance; different tenant, principal or instance keys do not collide",
+    "Known non-public policy classification persists on read without inventing a data-write producer",
+    "CLASSIFICATION and WRITE events explicitly distinguish classifier and writer task/action references",
+    "Lower input cannot downgrade the destination's known baseline or an existing higher label",
+    "Exact action replay does not create a new revision; changed provenance/label under the same action is denied",
+    "Missing schema, orphaned history, malformed provenance and unavailable connection fail closed",
+    "Already observed version disappearance or regression is rejected",
+    "All 512 bounded source references at 512 characters each round-trip without truncation",
+    "Prepare failure creates no label; uncertain native write conservatively retains the label",
+    "Synchronous and asynchronous native-read races recheck labels before governed output delivery"
+  ],
+  "remoteFlowProperties": [
+    "Budget admission and source/tag transition are checked in the same authoritative guarded commit",
+    "Legacy count-only commit cannot bypass configured flow",
+    "Sensitive read during preparation is rechecked before external execution",
+    "Only admitted successful post-checked and audited tool actions can register prerequisites",
+    "Audit failure or native tool failure does not register a completed prerequisite",
+    "Replayed admission cannot change destination or reuse an earlier lower task label",
+    "No model, tool body, retrieval query or retrieval response plaintext reaches flow-status RPC; unknown destination strings are suppressed",
+    "Receiver cannot substitute independent flow policy or label store",
+    "Configured catalog without flow policy rejects native data access and delegation export",
+    "Flow rejection after remote usage reservation refunds pre-dispatch holds without uncertain billing"
+  ],
+  "notImplementedOrNotVerified": [
+    "Document/message-fragment or byte-level provenance and taint tracking",
+    "Persistent grant leases, original task-step restoration or persistent usage ledger recovery",
+    "Production IAM/mTLS and database authorization deployment",
+    "Other database dialects, backup/encryption/retention policies or crash/power-loss recovery",
+    "Protection against privileged database administrators rewriting history",
+    "Exactly-once native effects, rollback or forced termination of arbitrary external work"
+  ],
+  "overallSecurityHardeningGoalComplete": false
+}

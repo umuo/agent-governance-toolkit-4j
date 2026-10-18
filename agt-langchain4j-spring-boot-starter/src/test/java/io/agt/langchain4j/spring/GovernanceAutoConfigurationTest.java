@@ -122,6 +122,40 @@ class GovernanceAutoConfigurationTest {
     }
 
     @Test
+    void hostMeterAndTerminationBeansApplyToGeneratedServices() {
+        var completions = new AtomicInteger();
+        var meter = ModelUsageMeter.standardParameters(request -> 100);
+        ModelTerminationContract contract =
+                request ->
+                        new ModelTerminationContract.Call() {
+                            public java.util.concurrent.CompletionStage<
+                                            io.agt.core.execution.TerminationEvidence>
+                                    requestCancellation() {
+                                return java.util.concurrent.CompletableFuture.completedFuture(
+                                        io.agt.core.execution.TerminationEvidence.UNKNOWN);
+                            }
+
+                            public io.agt.core.execution.TerminationEvidence completed(
+                                    ChatResponse response) {
+                                completions.incrementAndGet();
+                                return io.agt.core.execution.TerminationEvidence.CONFIRMED;
+                            }
+                        };
+        runner.withUserConfiguration(Host.class)
+                .withBean(ModelUsageMeter.class, () -> meter)
+                .withBean(ModelTerminationContract.class, () -> contract)
+                .run(
+                        context -> {
+                            assertThat(context).hasNotFailed();
+                            var options = context.getBean(AiServiceOptions.class);
+                            assertSame(meter, options.modelUsageMeter());
+                            assertSame(contract, options.modelTerminationContract());
+                            assertEquals("answer", context.getBean(Assistant.class).chat("hello"));
+                            assertEquals(1, completions.get());
+                        });
+    }
+
+    @Test
     void missingIdentityFailsAtStartup() {
         runner.withBean(
                         AgentControl.class,

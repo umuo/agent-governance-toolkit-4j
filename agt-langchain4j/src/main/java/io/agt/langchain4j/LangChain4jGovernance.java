@@ -105,7 +105,8 @@ public final class LangChain4jGovernance {
     }
 
     public ChatModel guardModel(ChatModel model) {
-        return ModelAdapters.guard(control, model);
+        return ModelAdapters.guard(
+                control, model, options.modelUsageMeter(), options.modelTerminationContract());
     }
 
     public StreamingChatModel guardStreamingModel(StreamingChatModel model) {
@@ -114,7 +115,13 @@ public final class LangChain4jGovernance {
 
     public StreamingChatModel guardStreamingModel(
             StreamingChatModel model, StreamingLimits limits) {
-        return StreamingAdapters.guard(control, model, limits);
+        return StreamingAdapters.guard(
+                control,
+                model,
+                limits,
+                StreamDelivery.STRICT,
+                options.modelUsageMeter(),
+                options.modelTerminationContract());
     }
 
     public static BufferedTokenStream buffered(TokenStream stream) {
@@ -128,12 +135,26 @@ public final class LangChain4jGovernance {
         return RetrievalAdapters.guard(control, resource, retriever);
     }
 
+    public ContentRetriever guardRetriever(
+            DataResource resource, ContentRetriever retriever, DocumentResolver documents) {
+        return RetrievalAdapters.guard(
+                control, resource, retriever, Objects.requireNonNull(documents));
+    }
+
     public ChatMemory guardMemory(DataResource resource, ChatMemory memory) {
         return MemoryAdapters.guard(control, resource, memory);
     }
 
     public ToolExecutor guardTool(String name, ToolExecutor executor) {
         return ToolAdapters.guard(control, name, executor);
+    }
+
+    public ToolExecutor guardEffectTool(
+            String name,
+            io.agt.core.effects.EffectLedger ledger,
+            java.util.function.Function<HostSession, io.agt.core.effects.EffectIntent> intent,
+            io.agt.core.effects.EffectBackend backend) {
+        return guardTool(name, ToolAdapters.effectRegistration(name, ledger, intent, backend));
     }
 
     /** 返回受模型/工具策略治理的固定命令；不能提供任意脚本执行能力。 */
@@ -354,6 +375,16 @@ public final class LangChain4jGovernance {
             return this;
         }
 
+        public Builder<T> contentRetriever(
+                DataResource resource, ContentRetriever retriever, DocumentResolver documents) {
+            if (augmentor != null) throw new GovernanceException("data_component_conflict");
+            augmentor =
+                    RetrievalAdapters.singleSource(
+                            governance.control,
+                            governance.guardRetriever(resource, retriever, documents));
+            return this;
+        }
+
         public Builder<T> chatMemory(ChatMemory memory) {
             if (governedMemoryProvider || MemoryAdapters.isGoverned(this.memory)) {
                 throw new GovernanceException("data_component_conflict");
@@ -409,6 +440,18 @@ public final class LangChain4jGovernance {
         public Builder<T> tools(List<AiServiceTool> values) {
             tools.addAll(values);
             return this;
+        }
+
+        public Builder<T> effectTool(
+                ToolSpecification specification,
+                io.agt.core.effects.EffectLedger ledger,
+                java.util.function.Function<HostSession, io.agt.core.effects.EffectIntent> intent,
+                io.agt.core.effects.EffectBackend backend) {
+            return tools(
+                    Map.of(
+                            specification,
+                            ToolAdapters.effectRegistration(
+                                    specification.name(), ledger, intent, backend)));
         }
 
         public Builder<T> tools(Object... objects) {
@@ -822,6 +865,9 @@ public final class LangChain4jGovernance {
                 }
                 result.add(
                         tool.toBuilder()
+                                .toolSpecification(
+                                        ToolAdapters.reviewedSpecification(
+                                                governance.control, tool.toolSpecification()))
                                 .toolExecutor(
                                         governance.guardTool(tool.name(), tool.toolExecutor()))
                                 .build());

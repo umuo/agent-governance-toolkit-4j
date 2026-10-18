@@ -9,6 +9,14 @@ class TraceBodiesTest {
     private final ObjectMapper json = new ObjectMapper();
 
     @Test
+    void numericRepresentationMatchesPersistedJson() throws Exception {
+        var source = json.createObjectNode().put("duration", 120000L).put("large", Long.MAX_VALUE);
+        var captured = TraceBodies.capture("task_budget", source, 65536);
+        assertEquals(captured.body(), json.readTree(captured.body().toString()));
+        assertEquals(Long.MAX_VALUE, captured.body().path("large").asLong());
+    }
+
+    @Test
     void preservesStructureAndRedactsCredentialFieldsWithoutChangingOriginal() throws Exception {
         var source =
                 json.readTree(

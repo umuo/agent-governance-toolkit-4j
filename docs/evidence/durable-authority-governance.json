@@ -1,0 +1,84 @@
+{
+  "verifiedAt": "2026-10-17",
+  "scope": "Experimental JDBC authorization checkpoints, shared model usage and root flow state; opt-in",
+  "dependencies": {
+    "productionDriver": "Host-supplied JDBC DataSource; no production driver bundled",
+    "testedDriver": "com.h2database:h2:2.4.240",
+    "license": "MPL-2.0 or EPL-1.0",
+    "licenseSource": "https://github.com/h2database/h2database/blob/version-2.4.240/LICENSE.txt"
+  },
+  "coordination": {
+    "authority": "One root row transaction and row lock, no in-process authoritative balance cache",
+    "namespace": "authorityName + rootId; authorityName + taskId unique",
+    "sourceHandoff": "Reject queued/running/post-check-pending governed operations and unresolved local usage; bind source snapshots and output checks to authoritative views",
+    "restore": "Pure state reconstruction; no model/tool/data side-effect replay; no automatic lease revival",
+    "catalog": "Persistent stable catalog UUID must match original binding",
+    "capacity": "Persistent blocked marker when updated snapshot cannot fit; larger-limit instances cannot bypass marker"
+  },
+  "twoJvmScenario": {
+    "test": "DurableProcessTest.separateJvmsShareToolAndTokenLimitsAndColdReaderKeepsTotals",
+    "transport": "Independent SDK worker JVMs with separate JDBC registry instances coordinated through loopback H2 TCP; synthetic model functions",
+    "toolBudget": 3,
+    "nativeToolCalls": 3,
+    "fourthToolCall": "task_tool_budget_exceeded before native execution",
+    "tokenBudget": 200,
+    "modelReservationBound": 150,
+    "settledTokens": 100,
+    "settledCost": "0.00012",
+    "currency": "USD",
+    "price": "Fixed synthetic test price, not a production bill",
+    "nativeModelCalls": 2,
+    "thirdModelCall": "task_token_budget_exceeded before native execution",
+    "newReadOnlyJvmAfterCompletion": "STATE:3:100:0:0"
+  },
+  "killedWorkerScenario": {
+    "test": "DurableProcessTest.killedDispatchedJvmKeepsHoldAndStopsSiblingAcrossFreshRegistryInstances",
+    "failure": "Forcibly kill JVM after dispatch enters native function",
+    "heldTokens": 150,
+    "settledTokens": 0,
+    "uncertainCalls": 1,
+    "fault": "model_usage_unconfirmed",
+    "siblingNativeModelCalls": 0,
+    "newReadOnlyJvm": "STATE:0:0:150:1"
+  },
+  "failureScenarios": [
+    "Commit succeeds but acknowledgement is lost: return unavailable, keep dispatch in persistent ledger",
+    "Commit finishes after lease deadline: deny admission; observed time prevents rollback revival",
+    "Expired or explicitly ended dispatched call retains upper-bound hold and freezes root",
+    "Prepared call can be released; closing a worker cannot reset settled consumption",
+    "Model identity mismatch or exceeded actual bounds persist failure instead of rolling back",
+    "Concurrent registry instances cannot multiply single-use grants or token reservations",
+    "Duplicate root registration cannot reset consumption",
+    "Missing schema or damaged/inconsistent checkpoint has no empty-state fallback",
+    "Wrong catalog, tenant, principal or missing inspection permission is denied",
+    "Checkpoint capacity exhaustion persists blocked root even for larger-limit instances",
+    "Authority shutdown waits boundedly for started heartbeat tasks before storage teardown"
+  ],
+  "limitations": [
+    "Only H2 SQL/transactions tested; production database adaptation and HA/failover not verified",
+    "Whole-root snapshot per transaction; large graph/high throughput capacity not verified",
+    "Host must authenticate control-plane and inspection callers, provide TLS/IAM and protect DB credentials",
+    "Checksum detects corruption but does not prevent privileged DB tampering or rollback",
+    "Checkpoint contains identity/resource/policy metadata; encryption, retention and tamper-evident audit remain pending",
+    "No automatic task resume, unknown-bill reconciliation, side-effect replay/rollback or external cancellation confirmation",
+    "Label catalog update and authorization checkpoint are separate conservative transactions",
+    "Complete hardening plan including finer data provenance and P1 remains active"
+  ],
+  "verification": {
+    "command": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 spotless:apply verify",
+    "javaVersion": 17,
+    "reactorBuild": "SUCCESS",
+    "tests": 629,
+    "passed": 628,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1,
+    "skipReason": "Optional real-provider test is not enabled",
+    "coreTests": 115,
+    "provenanceTests": 15,
+    "delegationTests": 46,
+    "durableRegistryTests": 13,
+    "langchain4jTests": 225,
+    "frontendChangedOrRebuiltInThisPhase": false
+  }
+}

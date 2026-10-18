@@ -16,6 +16,21 @@ nav:
       - Web Agent 实验台: web-agent-guide.md
       - 十大风险完整实验: top10-live-cases.md
       - Agent 执行链路: agent-tracing.md
+      - 安全能力补齐计划: security-hardening-plan.md
+      - Token 与费用预算: model-usage-budget.md
+      - 跨进程委托与撤销: remote-delegation.md
+      - 跨服务数据流与持久来源: persistent-data-flow.md
+      - 持久化授权与共享账本: durable-authority.md
+      - 文档片段与消息级来源: fragment-provenance.md
+      - 外部执行取消与回执: external-cancellation.md
+      - 模型终止与可信回执: model-termination.md
+      - 逻辑文档版本: document-versions.md
+      - 注入检测与来源: injection-detection.md
+      - 副作用幂等与结果核对: reliable-effects.md
+      - 审计与正文数据治理: audit-data-governance.md
+      - 已认证身份与撤销: authenticated-identity.md
+      - 持久人工审批: durable-approvals.md
+      - 工具清单与版本绑定: reviewed-tools.md
       - ASI05 网页对照案例: asi05-reproduction-cases.md
   - 需求与架构:
       - 架构与扩展: architecture.md

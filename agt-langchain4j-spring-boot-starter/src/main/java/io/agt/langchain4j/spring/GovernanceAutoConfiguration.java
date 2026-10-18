@@ -3,6 +3,9 @@ package io.agt.langchain4j.spring;
 import io.agt.core.AgentControl;
 import io.agt.langchain4j.AiServiceOptions;
 import io.agt.langchain4j.LangChain4jGovernance;
+import io.agt.langchain4j.ModelTerminationContract;
+import io.agt.langchain4j.ModelUsageMeter;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -26,8 +29,17 @@ import org.springframework.context.annotation.Bean;
 public class GovernanceAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
-    AiServiceOptions agtAiServiceOptions(GovernanceProperties properties) {
-        return properties.toOptions();
+    AiServiceOptions agtAiServiceOptions(
+            GovernanceProperties properties,
+            ObjectProvider<ModelUsageMeter> meter,
+            ObjectProvider<ModelTerminationContract> termination) {
+        var defaults = properties.toOptions();
+        return new AiServiceOptions(
+                defaults.delivery(),
+                defaults.streamingLimits(),
+                defaults.publisherPrefetch(),
+                meter.getIfAvailable(),
+                termination.getIfAvailable());
     }
 
     @Bean

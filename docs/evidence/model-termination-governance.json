@@ -1,0 +1,94 @@
+{
+  "verifiedAt": "2026-10-17",
+  "scope": "Guarded native model request lifecycle, trusted per-request stop contract, independent usage accounting and authoritative JDBC visibility",
+  "verification": {
+    "command": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 spotless:apply verify",
+    "javaVersion": 17,
+    "reactorBuild": "SUCCESS",
+    "tests": 676,
+    "passed": 675,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1,
+    "skipReason": "Optional real-provider test is not enabled",
+    "moduleTests": {
+      "core": 131,
+      "provenance": 16,
+      "delegation": 48,
+      "delegationJdbc": 20,
+      "observability": 5,
+      "langchain4j": 243,
+      "springBootStarter": 10,
+      "sandbox": 50,
+      "examplesLive": 153
+    },
+    "frontendChangedOrRebuiltInThisPhase": false
+  },
+  "architecture": {
+    "automaticCoverage": "Guarded synchronous, asynchronous and streaming model calls, including native AI Service paths; one MODEL_REQUEST registration per native call, independent of UsageLimits",
+    "beforeDispatch": "External register/start authority acknowledgement precedes native invocation and usage dispatch; unused preparation and unsent usage holds close on refusal",
+    "delivery": "Evidence classification precedes asynchronous result delivery; late streaming terminal callback can confirm work without delivering a cancelled response",
+    "defaultProof": "A valid complete native ChatResponse confirms only the logical MODEL_REQUEST; cancellation of transport or Future does not prove remote generation stopped",
+    "hostExtension": "ModelTerminationContract binds the actual governed request to trusted provider-specific stop acknowledgement; optional Spring beans centralized in default AiServiceOptions",
+    "replication": "Model records reuse shared external-work ownership, bounded metadata publication, sticky unknown state and JDBC checkpoints; cancellation fact published before a racing exit receipt",
+    "shutdown": "Bounded two-second drain for already queued metadata; no durable node outbox"
+  },
+  "httpScenarios": [
+    {
+      "test": "ModelTerminationHttpTest.closingNativeFutureDoesNotStopServerJobOrManufactureConfirmation",
+      "transport": "Real loopback HTTP and Java HttpClient",
+      "assertions": [
+        "Client delivery cancelled while synthetic server job continues ticking",
+        "No stop API invoked",
+        "UNKNOWN retains active=1 and freezes shared root"
+      ]
+    },
+    {
+      "test": "ModelTerminationHttpTest.authenticatedStopAcknowledgementConfirmsActualServerExit",
+      "assertions": [
+        "Authenticated stop waits for actual server job exit",
+        "Before acknowledgement remains unconfirmed",
+        "Request tombstone blocks delayed creation after stop",
+        "Full receipt releases active slot and healthy parent can continue"
+      ]
+    },
+    {
+      "test": "ModelTerminationHttpTest.confirmedProviderStopDoesNotRefundDispatchedUnknownUsage",
+      "assertions": [
+        "Synchronous native request is revoked and actual synthetic job stops",
+        "Physical stop can be confirmed while heldTokens=150 and uncertainCalls=1 remain",
+        "model_usage_unconfirmed keeps root frozen"
+      ]
+    }
+  ],
+  "independentProcessScenarios": {
+    "test": "ModelUsageRemoteHttpTest.officialClientModelWorkIsVisibleToFreshJdbcAuthorityAfterWorkerExit",
+    "variants": 2,
+    "topology": "Two independent SDK JVMs using LangChain4j official OpenAI client, loopback HTTP status/provider endpoints and H2 JDBC authority",
+    "normal": [
+      "Synchronous and asynchronous complete responses produce two MODEL_REQUEST entries",
+      "Workers exit normally; fresh JDBC registry observes full confirmation and active=0"
+    ],
+    "killed": [
+      "SDK JVM forcibly killed during dispatched HTTP generation",
+      "Fresh JDBC registry observes UNKNOWN, active=1, sticky external_execution_unconfirmed",
+      "Sibling request denied before another provider dispatch",
+      "Dispatched unknown usage retains 150 Token hold"
+    ]
+  },
+  "additionalRegression": {
+    "nativeLifecycleTests": 7,
+    "httpTerminationTests": 3,
+    "spring": "GovernanceAutoConfigurationTest.hostMeterAndTerminationBeansApplyToGeneratedServices validates real Boot wiring and native service invocation",
+    "receiptRace": "ExternalExecutionTest.earlyExitReceiptPublishesCancellationBeforeCompletion deterministically executes exit publication before cancellation publication",
+    "existingRegression": "Streaming error cause remains stream_failed; fixed Java process cancellation remains CANCEL_CONFIRMED after actual PID exit"
+  },
+  "privacy": "External execution RPC and persistent work rows contain identifiers/state/evidence rather than model request/response content or provider credentials; all fixture identities and data are synthetic",
+  "limitations": [
+    "Complete response confirms logical request scope, not provider OS cleanup or final billing",
+    "No production vendor stop API or real billing was verified; host contract must supply request-bound trustworthy evidence and prevent delayed start after stop acknowledgement",
+    "No persistent node receipt outbox; process/network failure can lose terminal evidence",
+    "Only H2 and local test transport were verified; production IAM, database HA/failover and platform isolation remain open",
+    "Logical document versions and P1 injection, reliable side effects, audit governance, approvals and supply-chain work remain in the active plan"
+  ]
+}

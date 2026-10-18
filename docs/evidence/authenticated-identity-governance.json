@@ -1,0 +1,68 @@
+{
+  "verifiedAt": "2026-10-18",
+  "scope": "Experimental fixed RS256 access-token identity profile, mandatory online token status and actual core SessionAuthority binding; not enterprise IdP certification or durable human approval",
+  "verification": {
+    "javaVersion": 17,
+    "focusedCommand": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 -pl agt-identity -am spotless:apply test",
+    "identityTests": 18,
+    "identityPassed": 18,
+    "coreTests": 173,
+    "failures": 0,
+    "errors": 0,
+    "frontendChangedOrRebuiltInThisPhase": false,
+    "fullReactor": {
+      "command": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 spotless:apply verify",
+      "build": "SUCCESS",
+      "tests": 824,
+      "passed": 823,
+      "skipped": 1,
+      "skipReason": "Optional real-provider test is not enabled",
+      "identityTestsInThisRun": 17,
+      "notes": "Full run preceded final isolated identity deadline hardening; all other module sources are unchanged by that follow-up"
+    },
+    "finalFollowUp": {
+      "command": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 -pl agt-identity -am spotless:apply test",
+      "build": "SUCCESS",
+      "tests": 191,
+      "passed": 191,
+      "identityTests": 18,
+      "coreTests": 173,
+      "notes": "Final identity sources including hard unattached deadline and blocked-scheduler regression; no frontend changes in this phase"
+    },
+    "documentation": {
+      "command": "python3 -m mkdocs build --strict",
+      "build": "SUCCESS",
+      "output": "Temporary local directory; no publication",
+      "notes": "Three existing anchor-link INFO messages outside the identity guide; no warnings in successful strict build"
+    }
+  },
+  "evidence": [
+    {
+      "test": "JwtIdentityVerifierTest",
+      "tests": 7,
+      "checks": ["Real RSA signatures", "Fixed issuer/audience/client/key/type", "No token-controlled key URLs", "Duplicate JSON and unknown roles rejected before online lookup", "Only reviewed role permissions mapped", "Service actor and stale/unreviewed MFA denied", "Issuer-namespaced principal", "Credential toString redaction", "Clock rollback and late concurrent active response cannot revive rejected actor", "Ignoring-interrupt status adapter cannot expand fixed worker pool"]
+    },
+    {
+      "test": "IdentitySessionTest",
+      "tests": 6,
+      "checks": ["Authenticated principal reaches actual HostSession", "Exact policy fingerprint and ENFORCE mode binding", "One permit cannot bind two sessions", "Tenant substitution rejected", "Revocation before delegate produces zero business calls", "Revocation during running delegate prevents late output", "Background monitor releases/terminates revoked session", "Unattached permit expiry and one-time slot release", "Unattached deadline enforced even with blocked timer workers", "Verifier shutdown terminates actual session", "Original session can record shutdown after authority release"]
+    },
+    {
+      "test": "HttpTokenStatusTest",
+      "tests": 5,
+      "checks": ["Actual loopback HTTP form introspection with synthetic host authorization", "Actual core tool path succeeds then online inactive status blocks next call", "Full verified identity/profile match required beyond active=true", "Redirect does not reach target", "Response body limit, duplicate JSON, invalid UTF-8 and wrong content type rejected", "Total deadline includes delayed response body", "Production requires fixed HTTPS; explicit HTTP tests accept literal loopback only"]
+    }
+  ],
+  "notVerifiedOrNotImplemented": [
+    "No external Keycloak or other enterprise IdP deployed",
+    "Required AGT claim/role/MFA mapping and strict introspection profile need issuer integration",
+    "No automatic JWKS discovery or key-rotation operations",
+    "Human check validates trusted issuer assertions, not physical presence",
+    "No durable approval state, separation of duties or one-time approval consumption in this phase",
+    "No implicit local child delegation or verified composition with signed remote grants",
+    "No web login, CSRF integration or migration of demonstration TraceStore",
+    "Online token query and business side effect are not one distributed transaction",
+    "TokenStatus implementations are trusted host code; interrupt-ignoring work may retain bounded slots",
+    "No production latency/load/availability certification"
+  ]
+}

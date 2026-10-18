@@ -293,6 +293,15 @@ class FixedCommandTest {
                 Thread.sleep(10);
             }
             assertFalse(ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false));
+            long confirmed = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while (!session.externalExecutionSnapshot().allTerminationConfirmed()
+                    && System.nanoTime() < confirmed) Thread.sleep(5);
+            assertTrue(session.externalExecutionSnapshot().allTerminationConfirmed());
+            assertEquals(
+                    "DIRECT_PROCESS", session.externalExecutionSnapshot().entries().get(0).kind());
+            assertEquals(
+                    ExternalExecutionRegistry.State.CANCEL_CONFIRMED,
+                    session.externalExecutionSnapshot().entries().get(0).state());
             withSession(
                     control,
                     context(),

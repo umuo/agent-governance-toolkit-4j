@@ -36,6 +36,7 @@ public final class FixedCommand {
     private final CommandLimits limits;
     private final Semaphore capacity;
     private final CommandBackend backend;
+    private volatile boolean quarantined;
 
     public FixedCommand(
             String name,
@@ -161,16 +162,20 @@ public final class FixedCommand {
     public String execute(Map<String, Object> values, HostSession session) {
         prepare(values);
         session.checkActive();
+        if (quarantined) throw new GovernanceException("command_cleanup_unconfirmed");
         if (!capacity.tryAcquire()) {
             throw new GovernanceException("command_capacity_exceeded");
         }
         Process process = null;
         Thread reader = null;
+        var lifecycle = new LocalProcessLifecycle();
+        ExternalExecution registered = null;
         long start = System.nanoTime();
         try {
             if (backend != null) {
                 return backend.execute(plan(values), session);
             }
+            registered = session.registerExternalExecution("DIRECT_PROCESS", lifecycle::cancel);
             var argv = new ArrayList<String>();
             argv.add(executable.toString());
             for (var argument : arguments) {
@@ -185,11 +190,24 @@ public final class FixedCommand {
                             .redirectErrorStream(true);
             builder.environment().clear();
             session.checkActive();
+            registered.started();
+            lifecycle.attempted = true;
             process = builder.start();
+            lifecycle.attach(process);
             process.getOutputStream().close();
             Process started = process;
             var output = new CompletableFuture<String>();
-            reader = new Thread(() -> collect(started, output), "agt-command-output");
+            lifecycle.readerStarted();
+            reader =
+                    new Thread(
+                            () -> {
+                                try {
+                                    collect(started, output);
+                                } finally {
+                                    lifecycle.readerStopped();
+                                }
+                            },
+                            "agt-command-output");
             reader.setDaemon(true);
             reader.start();
             while (!output.isDone() || process.isAlive()) {
@@ -206,6 +224,7 @@ public final class FixedCommand {
                 }
                 Thread.sleep(10);
             }
+            session.checkActive();
             String text = output.join();
             if (process.exitValue() != 0) {
                 throw new GovernanceException("command_exit_denied");
@@ -218,17 +237,87 @@ public final class FixedCommand {
         } catch (IOException e) {
             throw new GovernanceException("command_start_failed");
         } catch (java.util.concurrent.CompletionException e) {
+            session.checkActive();
             throw e.getCause() instanceof GovernanceException g
                     ? g
                     : new GovernanceException("command_output_failed");
         } finally {
             if (process != null) {
+                if (registered != null && process.isAlive()) registered.requestCancellation();
                 terminate(process, reader == null);
             }
             if (reader != null) {
                 reader.interrupt();
+            } else if (process != null) {
+                lifecycle.readerStopped();
             }
-            capacity.release();
+            if (registered != null) {
+                var receipt = registered;
+                lifecycle.tryConfirm();
+                if (process == null)
+                    lifecycle.stopped.complete(
+                            lifecycle.attempted
+                                    ? TerminationEvidence.UNKNOWN
+                                    : TerminationEvidence.NOT_STARTED);
+                lifecycle.stopped.whenComplete(
+                        (proof, error) -> {
+                            try {
+                                receipt.finished(proof);
+                            } finally {
+                                if (proof == TerminationEvidence.CONFIRMED
+                                        || proof == TerminationEvidence.NOT_STARTED)
+                                    capacity.release();
+                                else quarantined = true;
+                            }
+                        });
+            } else {
+                capacity.release();
+            }
+        }
+    }
+
+    /** 只确认直接进程及其输出工作线程；不能证明所有不可观察后代已被内核回收。 */
+    private static final class LocalProcessLifecycle {
+        final CompletableFuture<TerminationEvidence> stopped = new CompletableFuture<>();
+        volatile boolean attempted;
+        private Process process;
+        private boolean cancelled, readerFinished;
+
+        void attach(Process started) {
+            boolean stop;
+            synchronized (this) {
+                process = started;
+                stop = cancelled;
+            }
+            started.onExit().whenComplete((value, error) -> tryConfirm());
+            if (stop) terminate(started, false);
+        }
+
+        java.util.concurrent.CompletionStage<TerminationEvidence> cancel() {
+            Process current;
+            synchronized (this) {
+                cancelled = true;
+                current = process;
+            }
+            if (current != null) terminate(current, false);
+            tryConfirm();
+            return stopped;
+        }
+
+        synchronized void readerStarted() {
+            readerFinished = false;
+        }
+
+        void readerStopped() {
+            synchronized (this) {
+                readerFinished = true;
+            }
+            tryConfirm();
+        }
+
+        synchronized void tryConfirm() {
+            if (process != null && !process.isAlive() && readerFinished)
+                stopped.complete(TerminationEvidence.CONFIRMED);
         }
     }
 

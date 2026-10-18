@@ -1,0 +1,70 @@
+{
+  "verifiedAt": "2026-10-17",
+  "followUpEvidence": "distributed-usage-governance.json",
+  "historicalScopeNote": "This initial phase denied UsageLimits export. The follow-up supports quiescent usage-ledger transfer; dynamic data-flow export remains denied.",
+  "scope": "Experimental cross-process delegation, online ancestor revocation and transferred shared call/session quotas",
+  "module": "agt-delegation",
+  "signingLibrary": "com.nimbusds:nimbus-jose-jwt:10.10",
+  "verification": {
+    "command": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 spotless:apply verify",
+    "javaVersion": 17,
+    "reactorBuild": "SUCCESS",
+    "tests": 569,
+    "passed": 568,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 1,
+    "skipReason": "Optional live-provider test is not enabled",
+    "delegationModuleTests": 18,
+    "coreTests": 115,
+    "frontendRebuiltInThisPhase": false,
+    "followUp": {
+      "change": "Strengthened the separate-JVM revocation test to revoke the source HostSession directly",
+      "command": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 -pl agt-delegation -am spotless:apply test",
+      "tests": 133,
+      "passed": 133,
+      "build": "SUCCESS"
+    }
+  },
+  "separateJvmHttpChecks": [
+    {
+      "test": "RemoteProcessTest.parentRevocationStopsASeparateJvmOverHttp",
+      "transport": "Loopback HTTP with random test credential mapped to a fixed host identity",
+      "authoritativeRegistry": "Parent JVM",
+      "receiver": "Separate child JVM using HttpGrantStatusClient and DelegationVerifier",
+      "beforeRevocation": "One tool side effect and one pending asynchronous tool call",
+      "afterRevocation": "Source HostSession.revoke triggers ancestor grant revocation; pending governed call terminates and subsequent tool call is denied",
+      "finalToolSideEffectCount": 1,
+      "passed": true
+    },
+    {
+      "test": "RemoteProcessTest.registryDisconnectStopsASeparateJvmOverHttp",
+      "beforeDisconnect": "One tool side effect and one pending asynchronous tool call",
+      "afterDisconnect": "Pending governed call fails with delegation_registry_unavailable; subsequent tool call denied",
+      "finalToolSideEffectCount": 1,
+      "passed": true
+    }
+  ],
+  "otherVerifiedProperties": [
+    "Only one of twelve concurrent receivers claims the same signed credential",
+    "Separate receiver runtimes share three root tool calls; a fourth does not execute",
+    "Remaining active-session slots are shared and reclaimed after receiver completion",
+    "An external-authority session cannot create an unregistered local child",
+    "Unbound credentials cannot issue descendant grants",
+    "Expired heartbeat leases cannot renew; unknown records after registry restart deny",
+    "Wrong actor, audience, issuer, key, algorithm, type and duplicate JSON fields deny",
+    "Policy mismatch and EVALUATE_ONLY receiver runtime deny",
+    "Original policy identity context is preserved across receiver agent IDs",
+    "Action idempotency binds grant, session, action ID, kind and effective parameter digest",
+    "HTTP redirects, malformed/oversize bodies and slow response bodies fail closed",
+    "Local data-flow or usage constraints prevent unsupported export instead of disappearing"
+  ],
+  "notVerifiedOrNotImplemented": [
+    "Production mTLS/IAM deployment and service-side authorization integration",
+    "Persistent or highly available authoritative registry",
+    "Distributed token/cost reservations and dynamic data-flow labels",
+    "Hard real-time cancellation, rollback or confirmed exit of arbitrary external work",
+    "Protection of operations that bypass the governed SDK runtime"
+  ],
+  "overallSecurityHardeningGoalComplete": false
+}

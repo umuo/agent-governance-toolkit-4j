@@ -21,6 +21,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class AgentTracerTest {
+    @Test
+    void budgetAdmissionRejectionIsDistinctFromUnknownOrBreachedProviderUsage() {
+        assertTrue(AgentTracer.isDenied(new GovernanceException("task_token_budget_exceeded")));
+        assertTrue(AgentTracer.isDenied(new GovernanceException("task_cost_budget_exceeded")));
+        assertFalse(AgentTracer.isDenied(new GovernanceException("model_usage_unknown")));
+        assertFalse(AgentTracer.isDenied(new GovernanceException("model_usage_bound_exceeded")));
+    }
+
     @TempDir Path directory;
 
     static final class Capture implements SpanProcessor {
@@ -46,6 +54,64 @@ class AgentTracerTest {
                 .setTracerProvider(provider)
                 .setPropagators(ContextPropagators.create(W3CTraceContextPropagator.getInstance()))
                 .build();
+    }
+
+    @Test
+    void correlationPreservesActualAuditScopeBodyPolicyAndClose() throws Exception {
+        var events = new ArrayList<AuditEvent>();
+        var closed = new AtomicInteger();
+        var bodyPolicy =
+                new AuditBodyPolicy(
+                        Set.of(InterventionPoint.PRE_MODEL_CALL), Set.of(), true, 1000, 1000);
+        AuditSink sink =
+                new AuditSink() {
+                    public AuditBodyPolicy bodyPolicy() {
+                        return bodyPolicy;
+                    }
+
+                    public void write(AuditRecord record) {
+                        fail("Scoped event must not be downgraded");
+                    }
+
+                    public void write(AuditEvent event) {
+                        events.add(event);
+                    }
+
+                    public void close() {
+                        closed.incrementAndGet();
+                    }
+                };
+        try (var provider = SdkTracerProvider.builder().addSpanProcessor(new Capture()).build()) {
+            var tracer = new AgentTracer(telemetry(provider));
+            try (var correlated = tracer.correlate(sink);
+                    var control =
+                            AgentControl.builder(StructuredPolicy.builder("audit-v1").build())
+                                    .audit(correlated)
+                                    .build()) {
+                tracer.invokeAgent(
+                        "agent",
+                        () -> {
+                            return tracer.governed(
+                                    control,
+                                    new TrustedContext("agent", "tenant", "user", Set.of()),
+                                    session ->
+                                            session.operation(
+                                                    false,
+                                                    null,
+                                                    "input-body",
+                                                    value -> "output-body",
+                                                    value -> value,
+                                                    (a, b) -> (String) b));
+                        });
+            }
+        }
+        var captured =
+                events.stream().filter(e -> e.body().content() != null).findFirst().orElseThrow();
+        assertEquals("tenant", captured.scope().tenantId());
+        assertEquals("user", captured.scope().principalId());
+        assertNotNull(captured.record().execution());
+        assertTrue(JsonValues.write(captured.body().content()).contains("input-body"));
+        assertEquals(1, closed.get());
     }
 
     @Test

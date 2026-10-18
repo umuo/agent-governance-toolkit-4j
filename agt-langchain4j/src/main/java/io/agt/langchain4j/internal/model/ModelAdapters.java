@@ -4,6 +4,8 @@ import dev.langchain4j.model.chat.ChatModel;
 import io.agt.core.AgentControl;
 import io.agt.core.GovernanceException;
 import io.agt.core.InterventionPoint;
+import io.agt.langchain4j.ModelTerminationContract;
+import io.agt.langchain4j.ModelUsageMeter;
 import java.util.Objects;
 import java.util.Set;
 
@@ -16,6 +18,18 @@ public final class ModelAdapters {
     private ModelAdapters() {}
 
     public static ChatModel guard(AgentControl control, ChatModel model) {
+        return guard(control, model, null);
+    }
+
+    public static ChatModel guard(AgentControl control, ChatModel model, ModelUsageMeter meter) {
+        return guard(control, model, meter, null);
+    }
+
+    public static ChatModel guard(
+            AgentControl control,
+            ChatModel model,
+            ModelUsageMeter meter,
+            ModelTerminationContract termination) {
         control.requirePoints(
                 Set.of(InterventionPoint.PRE_MODEL_CALL, InterventionPoint.POST_MODEL_CALL));
         if (!model.listeners().isEmpty()) {
@@ -24,6 +38,6 @@ public final class ModelAdapters {
         if (model instanceof GovernedChatModel) {
             throw new GovernanceException("already_governed");
         }
-        return new GovernedChatModel(control, Objects.requireNonNull(model));
+        return new GovernedChatModel(control, Objects.requireNonNull(model), meter, termination);
     }
 }

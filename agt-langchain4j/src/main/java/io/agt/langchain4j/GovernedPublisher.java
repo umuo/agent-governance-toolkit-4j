@@ -70,6 +70,8 @@ final class GovernedPublisher implements Flow.Publisher<Object> {
             int prefetch) {
         // 同时校验内部直接调用与公共 Options 入口。
         var options = new AiServiceOptions(delivery, limits, prefetch);
+        if (delivery == StreamDelivery.REALTIME && session.control().requiresCompleteOutputCheck())
+            throw new GovernanceException("injection_strict_stream_required");
         this.limits = options.streamingLimits();
         this.prefetch = options.publisherPrefetch();
         this.session = session;
@@ -538,7 +540,7 @@ final class GovernedPublisher implements Flow.Publisher<Object> {
                         if (closedForDelivery) downstream.onNext(next);
                         else
                             try (var scope = session.bind()) {
-                                session.checkActive();
+                                session.checkDelivery();
                                 downstream.onNext(next);
                             }
                         requestUpstream();

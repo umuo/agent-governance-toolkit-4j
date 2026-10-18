@@ -16,9 +16,13 @@ import dev.langchain4j.model.chat.response.StreamingHandle;
 import io.agt.core.AgentControl;
 import io.agt.core.GovernanceException;
 import io.agt.core.HostSession;
+import io.agt.langchain4j.ModelTerminationContract;
+import io.agt.langchain4j.ModelUsageMeter;
 import io.agt.langchain4j.StreamDelivery;
 import io.agt.langchain4j.StreamingLimits;
 import io.agt.langchain4j.internal.model.ModelAdapters;
+import io.agt.langchain4j.internal.model.ModelExecutionBridge;
+import io.agt.langchain4j.internal.model.TerminalAwareModel;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -35,31 +39,40 @@ final class GovernedStreamingChatModel implements StreamingChatModel {
     private final StreamingLimits limits;
     private final StreamDelivery delivery;
     private final StreamingChatModel delegate;
+    private final ModelUsageMeter meter;
+    private final ModelTerminationContract termination;
 
     GovernedStreamingChatModel(
             AgentControl control,
             StreamingChatModel delegate,
             StreamingLimits limits,
-            StreamDelivery delivery) {
+            StreamDelivery delivery,
+            ModelUsageMeter meter,
+            ModelTerminationContract termination) {
         this.control = control;
         this.delegate = delegate;
         this.limits = limits;
         this.delivery = delivery;
+        this.meter = meter;
+        this.termination = termination;
     }
 
     private ChatModel governed(StreamingChatResponseHandler handler) {
         ChatModel collected =
-                new ChatModel() {
+                new TerminalAwareModel() {
                     @Override
-                    public CompletableFuture<ChatResponse> chatAsync(
-                            ChatRequest request, ChatRequestOptions options) {
+                    public CompletableFuture<ChatResponse> chatAsyncObserved(
+                            ChatRequest request,
+                            ChatRequestOptions options,
+                            ModelExecutionBridge.Call observation) {
                         return StreamingCollector.collect(
                                 control.currentSession(),
                                 delegate,
                                 limits,
                                 request,
                                 options,
-                                delivery == StreamDelivery.REALTIME ? handler : null);
+                                delivery == StreamDelivery.REALTIME ? handler : null,
+                                observation);
                     }
 
                     @Override
@@ -67,7 +80,7 @@ final class GovernedStreamingChatModel implements StreamingChatModel {
                         return delegate.defaultRequestParameters();
                     }
                 };
-        return ModelAdapters.guard(control, collected);
+        return ModelAdapters.guard(control, collected, meter, termination);
     }
 
     @Override
@@ -93,7 +106,7 @@ final class GovernedStreamingChatModel implements StreamingChatModel {
                             return;
                         }
                         try {
-                            session.checkActive();
+                            session.checkDelivery();
                             String text = response.aiMessage().text();
                             if (delivery == StreamDelivery.STRICT
                                     && text != null
@@ -113,7 +126,7 @@ final class GovernedStreamingChatModel implements StreamingChatModel {
                                                     }
                                                 }));
                             }
-                            session.checkActive();
+                            session.checkDelivery();
                             handler.onCompleteResponse(response);
                         } catch (Throwable failure) {
                             String code = safe(failure).code();

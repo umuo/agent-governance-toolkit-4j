@@ -9,6 +9,16 @@ package io.agt.core.audit;
 public interface AuditSink extends AutoCloseable {
     void write(AuditRecord record) throws Exception;
 
+    default AuditBodyPolicy bodyPolicy() {
+        return AuditBodyPolicy.NONE;
+    }
+
+    default void write(AuditEvent event) throws Exception {
+        if (event.body().content() != null)
+            throw new io.agt.core.GovernanceException("audit_body_sink_required");
+        write(event.record());
+    }
+
     @Override
     default void close() throws Exception {}
 }

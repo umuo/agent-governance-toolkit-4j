@@ -5,6 +5,7 @@ import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import io.agt.core.AgentControl;
 import io.agt.core.GovernanceException;
 import io.agt.core.data.DataResource;
+import io.agt.langchain4j.DocumentResolver;
 import java.util.Objects;
 
 /**
@@ -17,6 +18,14 @@ public final class RetrievalAdapters {
 
     public static ContentRetriever guard(
             AgentControl control, DataResource resource, ContentRetriever retriever) {
+        return guard(control, resource, retriever, null);
+    }
+
+    public static ContentRetriever guard(
+            AgentControl control,
+            DataResource resource,
+            ContentRetriever retriever,
+            DocumentResolver resolver) {
         io.agt.langchain4j.internal.data.DataAccessSupport.require(
                 control, Objects.requireNonNull(resource), DataResource.Kind.RETRIEVAL);
         Objects.requireNonNull(retriever);
@@ -29,7 +38,7 @@ public final class RetrievalAdapters {
                 .equals("dev.langchain4j.rag.content.retriever.ListeningContentRetriever")) {
             throw new GovernanceException("data_listener_unsupported");
         }
-        return new GovernedContentRetriever(control, resource, retriever);
+        return new GovernedContentRetriever(control, resource, retriever, resolver);
     }
 
     public static RetrievalAugmentor singleSource(

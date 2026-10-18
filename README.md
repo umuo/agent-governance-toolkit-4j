@@ -144,3 +144,33 @@ java -jar examples/target/agt-examples-0.6.0-SNAPSHOT.jar security asi05
 真实模型的 ASI01–ASI10 共 43 个网页安全对照见 [十大风险完整实验目录](docs/top10-live-cases.md)，可查看完整请求、响应、工具状态和各类防护边界。
 
 多 Agent 父子执行、OpenTelemetry 链路与可视化见 [Agent 执行链路](docs/agent-tracing.md)。
+
+安全能力补齐进度、显式父子会话及根任务共享预算见 [安全补齐计划](docs/security-hardening-plan.md)。
+
+根任务共享 Token/费用预占、结算与 Provider 计量契约见 [模型用量预算](docs/model-usage-budget.md)。
+
+跨进程签名授权、防重放、在线撤销与共享调用配额的实验模块见 [远端委托指南](docs/remote-delegation.md)。
+
+跨服务敏感等级传播、记忆标签重启继承与写入来源版本见 [持久数据流指南](docs/persistent-data-flow.md)。
+
+多实例共享授权、持久 Token/费用账本与中断后未知消费保留见 [持久授权指南](docs/durable-authority.md)。
+
+RAG 文本片段、记忆消息的来源摘要、持久分类及跨进程因果绑定见 [片段来源指南](docs/fragment-provenance.md)。
+
+外部执行取消请求、实际终止回执、固定命令与沙箱清理证据范围见 [外部取消指南](docs/external-cancellation.md)。
+
+受治理模型调用自动登记 MODEL_REQUEST，取消与远端停止确认分离；可选宿主终止契约和 Spring Bean 配置见 [模型终止指南](docs/model-termination.md)。
+
+可信入库发布、文档版本与片段清单、旧上下文拒绝及版本检索器接入见 [逻辑文档版本](docs/document-versions.md)。
+
+可插拔注入检测、LLM Guard 协议接入、来源标记及超时/故障策略见 [注入检测指南](docs/injection-detection.md)。
+
+业务意图幂等、JDBC 副作用日志、未知结果阻断、可信核对与显式补偿见 [可靠副作用指南](docs/reliable-effects.md)。
+
+显式正文采集、租户/主体隔离、加密持久审计、独立见证与到期清理见 [审计与正文治理](docs/audit-data-governance.md)。
+
+访问令牌验签、角色映射、在线撤销与实际会话身份绑定见 [已认证身份指南](docs/authenticated-identity.md)；企业身份源仍待部署。
+
+独立人工身份、加密待审动作、单次批准消费与崩溃后拒绝重放见 [持久审批指南](docs/durable-approvals.md)；企业登录与审批工作台仍待接入。
+
+工具描述与制品清单核对、模型前检查、调用/审批版本绑定及本机撤销见 [工具版本指南](docs/reviewed-tools.md)；发布来源验证、持久目录与凭据代理仍待接入。

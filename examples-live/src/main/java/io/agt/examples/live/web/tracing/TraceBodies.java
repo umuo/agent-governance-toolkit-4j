@@ -1,12 +1,14 @@
 package io.agt.examples.live.web.tracing;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.*;
 import java.nio.charset.StandardCharsets;
 import java.util.Set;
 
 /** 保留 JSON 结构，屏蔽常见凭据字段与 Bearer/API-key 标记，不接收 HTTP 头。 */
 final class TraceBodies {
+    private static final ObjectMapper JSON = new ObjectMapper();
     private static final Set<String> SECRETS =
             Set.of(
                     "authorization",
@@ -24,7 +26,13 @@ final class TraceBodies {
     }
 
     static TraceStore.Payload capture(String kind, JsonNode source, int limit) {
-        JsonNode clean = redact(source);
+        JsonNode clean;
+        try {
+            // 内存和历史恢复使用相同 JSON 数字表示，例如值为 120000 的 long 字段。
+            clean = redact(JSON.readTree(JSON.writeValueAsBytes(source)));
+        } catch (java.io.IOException error) {
+            throw new IllegalArgumentException("Invalid trace body", error);
+        }
         int size = bytes(clean);
         if (size <= limit) return new TraceStore.Payload(kind, clean, false, size);
         // 超限时展示原 JSON 的文本片段，不伪装成完整 JSON；按最坏转义长度预留空间。

@@ -1,0 +1,89 @@
+{
+  "verifiedAt": "2026-10-17",
+  "followUpEvidence": "persistent-data-flow-governance.json",
+  "historicalScopeNote": "Dynamic flow was still pending at this phase. Follow-up verifies shared remote flow and persistent instance labels; grant and usage ledger persistence remain pending.",
+  "scope": "Experimental authoritative cross-process token/cost ledger and lease-bound reservation lifecycle",
+  "verification": {
+    "command": "mvn -B -ntp -s .mvn/settings.xml -Dmaven.repo.local=.cache/m2 spotless:check verify",
+    "javaVersion": 17,
+    "reactorBuild": "SUCCESS",
+    "tests": 588,
+    "passed": 587,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1,
+    "skipReason": "Optional live-provider test is not enabled",
+    "coreTests": 115,
+    "delegationTests": 34,
+    "langchain4jTests": 224,
+    "frontendChangedOrRebuiltInThisPhase": false
+  },
+  "wireTests": {
+    "test": "ModelUsageRemoteHttpTest.twoJvmWorkersCannotMultiplyTokenOrCostBudget",
+    "architecture": "Parent JVM hosts authoritative registry, authenticated test transport and simulated Provider; two separate child JVMs run the official model client and governed adapters",
+    "transportAuthentication": "Random local credential mapped to a host-supplied reader identity; no production IAM claim",
+    "provider": "Loopback simulated OpenAI-compatible HTTP endpoint, not a real provider",
+    "clientRetries": 0,
+    "execution": "One synchronous request from worker A, one asynchronous request from worker B, third request from A refused before Provider",
+    "cases": [
+      {
+        "maxTokens": 200,
+        "maxCost": "1",
+        "thirdRequestReason": "task_token_budget_exceeded",
+        "providerRequests": 2
+      },
+      {
+        "maxTokens": 1000,
+        "maxCost": "0.00026",
+        "thirdRequestReason": "task_cost_budget_exceeded",
+        "providerRequests": 2
+      }
+    ],
+    "assertedWireFields": {
+      "model": "model",
+      "max_completion_tokens": 50,
+      "max_tokens": null
+    },
+    "reservationPerRequest": { "inputUpperBound": 100, "outputUpperBound": 50, "tokens": 150 },
+    "simulatedUsagePerResponse": { "input": 40, "output": 10, "total": 50 },
+    "finalLedger": { "settledTokens": 100, "heldTokens": 0, "settledCost": "0.00012", "currency": "USD" },
+    "prices": "Fixed test prices only: 1 USD/million input tokens and 2 USD/million output tokens"
+  },
+  "crashedProcessTest": {
+    "test": "ModelUsageRemoteHttpTest.killedDispatchedWorkerRetainsItsHoldAndStopsTheOtherJvm",
+    "event": "Force-kill worker A after the simulated Provider has received its request; worker B remains alive",
+    "finalLedger": {
+      "settledTokens": 0,
+      "heldTokens": 150,
+      "uncertainCalls": 1,
+      "fault": "model_usage_unconfirmed"
+    },
+    "subsequentWorkerBRequest": "Denied before Provider",
+    "providerRequests": 1,
+    "passed": true
+  },
+  "additionalVerifiedProperties": [
+    "Previously settled local consumption and signed model/price configuration survive handoff",
+    "Pending local usage prevents handoff and does not destroy the original local task",
+    "Twenty concurrent reservation attempts across two receiver runtimes share exactly three 150-token holds under a 450-token cap",
+    "Prepared cancellations refund; dispatched unknown usage preserves holds and freezes every receiver",
+    "Wrong served model and bound breaches cannot be accepted as cheaper or zero usage",
+    "Repeated reserve/dispatch/settle requests do not duplicate accounting; reservation IDs are grant-bound",
+    "Expired prepared leases refund while a healthy sibling remains usable",
+    "Expired dispatched leases quarantine a healthy sibling",
+    "Expired ancestor quarantines a descendant's pending usage even if the descendant renewed its own lease",
+    "Receiver cannot replace authoritative limits with an independent local UsageLimits",
+    "Generic unmetered model invocation is denied before native execution",
+    "Source local snapshot is explicitly marked transferred; authority Root exposes current shared snapshot",
+    "Protocol authenticates lease ownership, rejects root management operations and enforces exact fields",
+    "Snapshot decoder rejects null/coerced accounting fields instead of interpreting missing counters as zero"
+  ],
+  "notImplementedOrNotVerified": [
+    "Persistent or highly available authoritative ledger, restart recovery or billing reconciliation",
+    "Production mTLS/IAM deployment and real network partition behavior",
+    "Dynamic data-flow transfer and persistent provenance labels",
+    "Forced termination or rollback of arbitrary external work",
+    "Real Provider billing amounts"
+  ],
+  "overallSecurityHardeningGoalComplete": false
+}

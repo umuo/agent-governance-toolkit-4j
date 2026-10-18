@@ -148,7 +148,7 @@ final class HandlerPublisher implements Flow.Publisher<ChatModelStreamingEvent> 
                                 break;
                             }
                             if (value == null) break;
-                            session.checkActive();
+                            session.checkDelivery();
                             downstream.onNext(value);
                         } catch (Throwable e) {
                             synchronized (this) {

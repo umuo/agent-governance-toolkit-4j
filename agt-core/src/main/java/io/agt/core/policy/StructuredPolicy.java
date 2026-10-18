@@ -16,6 +16,7 @@ import io.agt.core.PolicyRequest;
 import io.agt.core.data.DataLimits;
 import io.agt.core.data.DataResource;
 import io.agt.core.data.DataRule;
+import io.agt.core.injection.InjectionCheck;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -41,7 +42,29 @@ public final class StructuredPolicy implements PolicyEvaluator {
             Map<String, ToolRule> tools,
             List<ContentRule> contentRules,
             Map<String, DataRule> resources,
-            DataLimits dataLimits) {
+            DataLimits dataLimits,
+            List<InjectionCheck> injectionChecks) {
+        public Document(
+                String apiVersion,
+                String version,
+                Set<InterventionPoint> points,
+                BudgetLimits budget,
+                Map<String, ToolRule> tools,
+                List<ContentRule> rules,
+                Map<String, DataRule> resources,
+                DataLimits dataLimits) {
+            this(
+                    apiVersion,
+                    version,
+                    points,
+                    budget,
+                    tools,
+                    rules,
+                    resources,
+                    dataLimits,
+                    List.of());
+        }
+
         public Document(
                 String apiVersion,
                 String version,
@@ -62,6 +85,20 @@ public final class StructuredPolicy implements PolicyEvaluator {
     }
 
     private final Document doc;
+
+    @Override
+    public String toolBinding(String tool) {
+        if (tool == null) return null;
+        var rule = doc.tools().get(tool);
+        return rule == null ? null : rule.binding();
+    }
+
+    @Override
+    public io.agt.core.effects.EffectRule effectRule(String tool) {
+        if (tool == null) return null;
+        var rule = doc.tools().get(tool);
+        return rule == null ? null : rule.effect();
+    }
 
     public StructuredPolicy(Document document) {
         if (!"agt.java/v1".equals(document.apiVersion())) {
@@ -88,6 +125,16 @@ public final class StructuredPolicy implements PolicyEvaluator {
                 throw new IllegalArgumentException("Invalid content rule binding");
             }
         }
+        var checks =
+                List.copyOf(
+                        document.injectionChecks() == null
+                                ? List.<InjectionCheck>of()
+                                : document.injectionChecks());
+        if (checks.size() > 16) throw new IllegalArgumentException("Too many injection checks");
+        var checkIds = new HashSet<String>();
+        for (var check : checks)
+            if (!points.containsAll(check.points()) || !checkIds.add(check.id()))
+                throw new IllegalArgumentException("Invalid injection check binding");
         doc =
                 new Document(
                         document.apiVersion(),
@@ -99,7 +146,13 @@ public final class StructuredPolicy implements PolicyEvaluator {
                         resources,
                         document.dataLimits() == null
                                 ? DataLimits.defaults()
-                                : document.dataLimits());
+                                : document.dataLimits(),
+                        checks);
+    }
+
+    @Override
+    public List<InjectionCheck> injectionChecks() {
+        return doc.injectionChecks();
     }
 
     public static StructuredPolicy fromPath(Path path) {
@@ -150,6 +203,10 @@ public final class StructuredPolicy implements PolicyEvaluator {
         return doc.version();
     }
 
+    public Document document() {
+        return doc;
+    }
+
     @Override
     public Set<InterventionPoint> interventionPoints() {
         return doc.interventionPoints();
@@ -198,6 +255,8 @@ public final class StructuredPolicy implements PolicyEvaluator {
             if (rule == null) {
                 throw new GovernanceException("tool_not_allowed");
             }
+            if (!java.util.Objects.equals(rule.binding(), r.toolBinding()))
+                throw new GovernanceException("tool_version_binding_denied");
             if (!r.context().permissions().containsAll(rule.permissions())) {
                 throw new GovernanceException("permission_denied");
             }
@@ -240,6 +299,7 @@ public final class StructuredPolicy implements PolicyEvaluator {
         private final Map<String, DataRule> resources = new LinkedHashMap<>();
         private final Map<String, ToolRule> tools = new LinkedHashMap<>();
         private final List<ContentRule> rules = new ArrayList<>();
+        private final List<InjectionCheck> checks = new ArrayList<>();
 
         private Builder(String version) {
             this.version = version;
@@ -283,6 +343,11 @@ public final class StructuredPolicy implements PolicyEvaluator {
             return this;
         }
 
+        public Builder injection(InjectionCheck check) {
+            checks.add(Objects.requireNonNull(check));
+            return this;
+        }
+
         public StructuredPolicy build() {
             return new StructuredPolicy(
                     new Document(
@@ -293,7 +358,8 @@ public final class StructuredPolicy implements PolicyEvaluator {
                             tools,
                             rules,
                             resources,
-                            dataLimits));
+                            dataLimits,
+                            checks));
         }
     }
 }
