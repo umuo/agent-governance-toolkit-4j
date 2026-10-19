@@ -213,6 +213,61 @@ class JwtIdentityVerifierTest {
     }
 
     @Test
+    void cancelledStatusWaitRejectsCurrentOperationWithoutPoisoningSharedActor() throws Exception {
+        var calls = new AtomicInteger();
+        var active = new AtomicBoolean(true);
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var error = new AtomicReference<GovernanceException>();
+        var interrupted = new AtomicBoolean();
+        try (var verifier =
+                verifier(
+                        t -> {
+                            if (calls.incrementAndGet() == 2) {
+                                entered.countDown();
+                                release.await();
+                            }
+                            return active.get();
+                        },
+                        new MutableClock())) {
+            var actor = verifier.verify(token(claims()));
+            var waiting =
+                    new Thread(
+                            () -> {
+                                try {
+                                    actor.checkActive();
+                                } catch (GovernanceException denied) {
+                                    error.set(denied);
+                                    interrupted.set(Thread.currentThread().isInterrupted());
+                                }
+                            });
+            try {
+                waiting.start();
+                assertTrue(entered.await(2, TimeUnit.SECONDS));
+                waiting.interrupt();
+                waiting.join(2000);
+                assertFalse(waiting.isAlive());
+                assertNotNull(error.get());
+                assertEquals("identity_status_cancelled", error.get().code());
+                assertTrue(interrupted.get());
+                release.countDown();
+                assertEquals(Set.of("read"), actor.context("next-request").permissions());
+                assertTrue(calls.get() >= 3, "Reuse requires a new online check");
+                active.set(false);
+                assertEquals(
+                        "identity_token_inactive",
+                        assertThrows(GovernanceException.class, actor::checkActive).code());
+                active.set(true);
+                assertThrows(GovernanceException.class, actor::checkActive);
+            } finally {
+                release.countDown();
+                waiting.interrupt();
+                waiting.join(2000);
+            }
+        }
+    }
+
+    @Test
     void blockingStatusAdapterUsesBoundedWorkersAndHasNoOfflineFallback() throws Exception {
         var entered = new CountDownLatch(1);
         var release = new CountDownLatch(1);

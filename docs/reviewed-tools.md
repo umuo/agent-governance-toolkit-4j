@@ -87,10 +87,30 @@ LangChain4j 的受审工具描述经 JSON 往返生成独立快照，宿主原 P
 
 撤销不能回滚已经发生的副作用，也不保证终止任意 Java 代码；派发与外部系统之间不是一个分布式原子事务。已开始的执行仍需外部终止和副作用核对机制。当前撤销保存在本机 catalog，尚未接入持久多节点发布目录。
 
+## 与可靠副作用组合
+
+受审版本可直接用于 `session.effectOperation(...)`、`effectOperationAsync(...)`、原生 `guardEffectTool(...)` 和 Builder 的 `effectTool(...)`。宿主先配置同一 `ToolRule` 的 `effect` 与 `binding`，并通过 `reviewedTools(...)` 固定实际租约。副作用入口从该固定登记选择租约，不从模型参数构造身份；普通工具入口仍不能绕过副作用日志。实际后端仍必须由可信宿主从审核制品装配。
+
+```java
+var rule = new ToolRule(Set.of("pay"), closedArguments, true,
+        new EffectRule("orders", "v1", EffectLedger.Phase.FORWARD, ledger.identity()),
+        lease.identity());
+// 在包含该 rule、reviewedTools 和审批配置的控制器内：
+var tool = governance.guardEffectTool("pay", ledger, session -> hostIntent, hostBackend);
+```
+
+`closedArguments`、`hostIntent` 与 `hostBackend` 是宿主已绑定配置，具体后端、意图及补偿要求见[可靠副作用指南](reliable-effects.md)。本组合沿用原有配置，不增加新的预算、存储或凭据字段。
+
+审批请求同时携带版本摘要和业务目标；准备后、实际后端派发前、缓存恢复后及原生回调前后重验租约。撤销后不交付恢复结果，但已经发生的业务提交仍保留 COMMITTED 凭据，不能因交付失败而重做。补偿使用自己的受审版本、权限与独立审批，绑定精确的正向成功凭据。
+
+受审版本加入持久请求指纹；业务意图键和后端幂等键保持稳定。因此，同意图换成新版本，或在未受审与受审入口之间切换，会以 `effect_request_mismatch` 拒绝执行或恢复，不会自动迁移已存在的日志。新任务或模型调用 ID 不能重置意图。版本升级需要宿主核对旧业务状态，不能通过换意图 ID 绕过此约束。未配置版本的旧工具保持原请求摘要。
+
+本阶段验证本机版本门禁与 JDBC 副作用日志的组合，包含同步/异步调用、实际 AI Service 循环、审批、回调中撤销和补偿。清单撤销仍局限本机；跨进程签名授权的版本提交、持久发布目录和凭据代理仍未接通。见[组合验收记录](evidence/reviewed-effects-governance.json)。
+
 ## 验收与未完成边界
 
 新增 8 项核心测试与 7 项原生集成测试覆盖制品和描述替换、不可变快照、总量预算、未绑定普通调用、缺失注册、审批摘要、准备/审批期间撤销、权限、其他 catalog 替换、观察模式、异步晚到结果、动态/静态/默认模型工具描述及模型前拒绝。额外覆盖 parameters、metadata、strict 的改动，以及执行前/后回调中的撤销。另补身份与加密审批到真实 HTTP 后端的组合测试。详见[结构化证据](evidence/reviewed-tool-governance.json)。
 
 当前没有验证任意 Java delegate 的二进制来源，也没有接入 Sigstore/SLSA 证明验证、远端 MCP 实际部署证明、依赖/SBOM 审核或恶意插件隔离。宿主不能把仅有清单匹配的任意插件当作不可信代码放进主 JVM。
 
-已审核版本与 `EffectToolRegistration` 自动装配、既有跨进程签名 SessionAuthority 的版本化工具提交尚未完成组合支持；这些路径拒绝执行，不会退回普通未校验调用。持久审核/发布目录、全局撤销及凭据代理仍按总计划继续实施，不能以本阶段测试通过声称整个供应链与凭据目标完成。
+已审核版本与 `EffectToolRegistration` 的本机自动装配已接通；既有跨进程签名 SessionAuthority 的版本化工具提交尚未完成组合支持，该远端路径拒绝执行，不会退回普通未校验调用。持久审核/发布目录、全局撤销及凭据代理仍按总计划继续实施，不能以本阶段测试通过声称整个供应链与凭据目标完成。

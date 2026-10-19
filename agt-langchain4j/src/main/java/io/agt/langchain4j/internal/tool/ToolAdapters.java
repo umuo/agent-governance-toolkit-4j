@@ -65,8 +65,7 @@ public final class ToolAdapters {
             throw new GovernanceException("already_governed");
         }
         if (executor instanceof EffectToolRegistration effect) {
-            if (control.reviewedTool(name) != null)
-                throw new GovernanceException("reviewed_effect_adapter_unsupported");
+            control.reviewedTool(name);
             if (!name.equals(effect.name()))
                 throw new GovernanceException("tool_identity_mismatch");
             return new GovernedEffectToolExecutor(control, effect, callbacks);

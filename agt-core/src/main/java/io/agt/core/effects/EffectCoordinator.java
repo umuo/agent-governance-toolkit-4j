@@ -26,7 +26,7 @@ public final class EffectCoordinator {
             PreparedEffect plan,
             Consumer<Object> before,
             Consumer<Object> rawResult) {
-        session.checkEffectAdmission(actionId, tool, plan.rule());
+        String toolBinding = session.effectToolBinding(actionId, tool, plan.rule());
         var rule = plan.rule();
         var intent = plan.intent();
         var ledger = plan.ledger();
@@ -49,7 +49,11 @@ public final class EffectCoordinator {
                                         : List.of(
                                                 intent.parent().receipt(),
                                                 intent.parent().resultDigest())));
+        // 保留未受审工具的旧摘要，受审版本则成为同一业务意图的不可变组成部分。
+        if (toolBinding != null)
+            digest = JsonValues.digest(List.of("AGT-REVIEWED-EFFECT-V1", digest, toolBinding));
         before.accept(plan.parameters());
+        session.checkEffectAdmission(actionId, tool, plan.rule());
         var owner =
                 new Owner(
                         session.taskSnapshot().taskId(),
@@ -84,10 +88,12 @@ public final class EffectCoordinator {
                         JsonValues.freeze(plan.backend().recover(call, claim.replay().proof()));
                 if (!JsonValues.digest(result).equals(claim.replay().proof().resultDigest()))
                     throw new GovernanceException("effect_result_mismatch");
-                session.checkActive();
+                session.checkEffectAdmission(actionId, tool, plan.rule());
                 session.effectEvidence(
                         actionId, "effect_replayed", key.digest(), digest, rule.phase(), attempt);
+                session.checkEffectAdmission(actionId, tool, plan.rule());
                 rawResult.accept(result);
+                session.checkEffectAdmission(actionId, tool, plan.rule());
                 return result;
             } catch (GovernanceException denied) {
                 throw denied;
@@ -140,8 +146,9 @@ public final class EffectCoordinator {
                     attempt);
             if (reply.status() != Status.COMMITTED)
                 throw new GovernanceException("effect_not_applied");
-            session.checkActive();
+            session.checkEffectAdmission(actionId, tool, plan.rule());
             rawResult.accept(reply.value());
+            session.checkEffectAdmission(actionId, tool, plan.rule());
             return reply.value();
         } catch (Throwable failure) {
             if (!settled) {

@@ -1,0 +1,68 @@
+{
+  "verifiedAt": "2026-10-19",
+  "scope": "Local reviewed ToolLease binding with persistent EffectLedger, version-bound approval, native sync/async tools and AI Service dispatch; not remote version authority or credential proxy",
+  "verification": {
+    "javaVersion": 17,
+    "targeted": {
+      "command": "mvn -pl agt-langchain4j -am -Dtest=ReviewedEffectToolTest,EffectToolTest,ReviewedToolsTest -Dsurefire.failIfNoSpecifiedTests=false spotless:apply test",
+      "build": "SUCCESS",
+      "tests": 30,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "fullReactor": {
+      "command": "mvn -B -ntp verify",
+      "build": "SUCCESS",
+      "tests": 879,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 1,
+      "passed": 878,
+      "moduleTests": {
+        "agt-approval-jdbc": 22,
+        "agt-observability": 6,
+        "agt-delegation": 59,
+        "agt-audit-jdbc": 21,
+        "examples-live": 153,
+        "agt-langchain4j": 295,
+        "agt-effects-jdbc": 21,
+        "agt-identity": 19,
+        "agt-provenance": 22,
+        "agt-delegation-jdbc": 20,
+        "agt-langchain4j-spring-boot-starter": 10,
+        "agt-sandbox": 50,
+        "agt-core": 181
+      },
+      "finishedAt": "2026-10-19T15:32:33+08:00",
+      "skipReason": "Optional real-provider test is not enabled"
+    },
+    "documentation": {
+      "command": "mkdocs build --strict",
+      "build": "SUCCESS"
+    },
+    "identityCancellation": {
+      "test": "JwtIdentityVerifierTest.cancelledStatusWaitRejectsCurrentOperationWithoutPoisoningSharedActor",
+      "result": "PASS",
+      "behavior": "Cancelled check rejects and preserves interrupt; subsequent actor use performs new online check; observed inactive status remains irreversible"
+    }
+  },
+  "assertions": [
+    "Approval contains both reviewed version and host effect intent",
+    "Same version and intent replays only after new authorization and approval",
+    "Changed version cannot recover or execute prior intent",
+    "Revocation in approval and backend precondition prevents business dispatch",
+    "Revocation after commit or during recovery prevents raw and checked result disclosure without deleting committed proof",
+    "Revocation in before/raw/after callbacks cannot return success",
+    "Real AiServices loop uses reviewed effect registration",
+    "Compensation uses independent reviewed binding and approval with the exact forward proof; repeated compensation recovers without repeated mutation",
+    "Shared actor is not permanently invalidated by local approval-wait interruption; subsequent use rechecks online status and cannot undo actual revocation"
+  ],
+  "remaining": [
+    "Remote signed version authority composition",
+    "Persistent reviewed release directory and global revocation",
+    "Credential proxy",
+    "Publisher provenance and backend deployment certification",
+    "Production business backend validation"
+  ]
+}

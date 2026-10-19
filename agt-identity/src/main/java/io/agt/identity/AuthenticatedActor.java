@@ -48,7 +48,11 @@ public final class AuthenticatedActor {
             String concurrentFailure = refused.get();
             if (concurrentFailure != null) throw new GovernanceException(concurrentFailure);
         } catch (GovernanceException failure) {
-            refused.compareAndSet(null, failure.code());
+            // 调用线程取消不构成身份失效证据；本次仍拒绝，下次必须重新在线校验。
+            // 已观察的撤销、超时和不可用继续保持不可逆，不能由较晚的有效响应恢复。
+            if (!"identity_status_cancelled".equals(failure.code())
+                    || !Thread.currentThread().isInterrupted())
+                refused.compareAndSet(null, failure.code());
             throw failure;
         }
     }

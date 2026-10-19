@@ -61,6 +61,14 @@ public final class HostSession implements AutoCloseable {
                 || !rule.equals(control.evaluator.effectRule(tool))
                 || !Objects.equals(toolExecutions.get(actionId), tool))
             throw new GovernanceException("effect_tool_admission_required");
+        validateToolBinding(tool, control.reviewedTool(tool));
+    }
+
+    /** 已提交副作用的版本指纹；进入持久请求摘要，版本变更不能重放旧意图。 */
+    public String effectToolBinding(
+            String actionId, String tool, io.agt.core.effects.EffectRule rule) {
+        checkEffectAdmission(actionId, tool, rule);
+        return control.evaluator.toolBinding(tool);
     }
 
     private final AgentControl control;
@@ -307,7 +315,7 @@ public final class HostSession implements AutoCloseable {
             Object effective,
             Object prepared) {
         if (authority != null) {
-            if (prepared instanceof BoundToolPreparation<?> bound)
+            if (prepared instanceof BoundToolPreparation<?> bound && bound.lease() != null)
                 authority.commit(
                         new PolicyRequest(
                                 point,
@@ -1402,7 +1410,9 @@ public final class HostSession implements AutoCloseable {
             java.util.function.Consumer<Object> raw,
             java.util.function.Consumer<Object> checked) {
         EffectInput bound;
+        io.agt.core.tools.ToolLease lease;
         try {
+            lease = control.reviewedTool(name);
             bound = effectInput(name, input, intent);
         } catch (RuntimeException invalid) {
             throw fail(
@@ -1417,13 +1427,15 @@ public final class HostSession implements AutoCloseable {
                 name,
                 InterventionPoint.PRE_TOOL_CALL,
                 InterventionPoint.POST_TOOL_CALL,
-                bound,
-                value -> prepareEffect(name, value, ledger, intent, backend),
+                lease == null ? bound : new ToolInput(bound, lease),
+                value ->
+                        new BoundToolPreparation<>(
+                                lease, prepareEffect(name, value, ledger, intent, backend)),
                 (action, value) ->
                         io.agt.core.effects.EffectCoordinator.execute(
-                                this, action, name, value, before, raw),
-                value -> value,
-                (original, effective) -> checkedEffect(effective, checked));
+                                this, action, name, value.value(), before, raw),
+                value -> lease == null ? value : new ToolInput(value, lease),
+                (original, effective) -> checkedEffect(name, lease, effective, checked));
     }
 
     public CompletableFuture<Object> effectOperationAsync(
@@ -1447,19 +1459,30 @@ public final class HostSession implements AutoCloseable {
             java.util.function.Consumer<Object> raw,
             java.util.function.Consumer<Object> checked) {
         try {
-            return new AsyncInvocation<io.agt.core.effects.PreparedEffect, Object>(
+            var lease = control.reviewedTool(name);
+            var bound = effectInput(name, input, intent);
+            return new AsyncInvocation<
+                            BoundToolPreparation<io.agt.core.effects.PreparedEffect>, Object>(
                             this,
                             false,
                             true,
                             name,
-                            effectInput(name, input, intent),
-                            value -> prepareEffect(name, value, ledger, intent, backend),
+                            lease == null ? bound : new ToolInput(bound, lease),
+                            value ->
+                                    new BoundToolPreparation<>(
+                                            lease,
+                                            prepareEffect(name, value, ledger, intent, backend)),
                             (action, value) ->
                                     CompletableFuture.completedFuture(
                                             io.agt.core.effects.EffectCoordinator.execute(
-                                                    this, action, name, value, before, raw)),
-                            value -> value,
-                            (original, effective) -> checkedEffect(effective, checked))
+                                                    this,
+                                                    action,
+                                                    name,
+                                                    value.value(),
+                                                    before,
+                                                    raw)),
+                            value -> lease == null ? value : new ToolInput(value, lease),
+                            (original, effective) -> checkedEffect(name, lease, effective, checked))
                     .start();
         } catch (RuntimeException error) {
             return CompletableFuture.failedFuture(
@@ -1471,10 +1494,16 @@ public final class HostSession implements AutoCloseable {
         }
     }
 
-    private Object checkedEffect(Object effective, java.util.function.Consumer<Object> checked) {
+    private Object checkedEffect(
+            String name,
+            io.agt.core.tools.ToolLease lease,
+            Object effective,
+            java.util.function.Consumer<Object> checked) {
         Object value = JsonValues.freeze(effective);
+        validateToolBinding(name, lease);
         checked.accept(value);
         checkActive();
+        validateToolBinding(name, lease);
         return value;
     }
 
