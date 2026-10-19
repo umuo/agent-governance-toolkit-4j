@@ -50,6 +50,17 @@ public interface GrantStatusClient {
 
     void commit(GrantLease lease, String sessionId, String actionId, String kind, String digest);
 
+    default void reviewedCommit(
+            GrantLease lease,
+            String session,
+            String action,
+            String tool,
+            String binding,
+            Object projection,
+            String digest) {
+        throw new GovernanceException("delegation_tool_binding_unsupported");
+    }
+
     void complete(GrantLease lease, String sessionId);
 
     default void usageReserve(

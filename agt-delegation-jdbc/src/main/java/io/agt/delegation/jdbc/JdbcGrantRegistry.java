@@ -351,6 +351,22 @@ public final class JdbcGrantRegistry implements GrantRegistry {
         command(lease, true, registry -> registry.commit(lease, session, action, kind, digest));
     }
 
+    public void reviewedCommit(
+            GrantLease lease,
+            String session,
+            String action,
+            String tool,
+            String binding,
+            Object projection,
+            String digest) {
+        command(
+                lease,
+                true,
+                registry ->
+                        registry.reviewedCommit(
+                                lease, session, action, tool, binding, projection, digest));
+    }
+
     public void complete(GrantLease lease, String session) {
         command(lease, false, registry -> registry.complete(lease, session));
     }

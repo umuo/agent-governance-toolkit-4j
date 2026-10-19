@@ -26,7 +26,49 @@ public record GrantDocument(
         BudgetLimits sessionBudget,
         DataLimits dataLimits,
         UsageLimits usageLimits,
-        String flowPolicy) {
+        String flowPolicy,
+        java.util.Map<String, String> toolBindings) {
+    public GrantDocument(
+            String id,
+            String issuer,
+            String audience,
+            TrustedContext identity,
+            String taskId,
+            String parentId,
+            int depth,
+            int maxDepth,
+            long issuedAt,
+            long expiresAt,
+            List<AuthorityFrame> frames,
+            DelegationQuota quota,
+            String policyDigest,
+            TrustedContext policyOwner,
+            BudgetLimits sessionBudget,
+            DataLimits dataLimits,
+            UsageLimits usageLimits,
+            String flowPolicy) {
+        this(
+                id,
+                issuer,
+                audience,
+                identity,
+                taskId,
+                parentId,
+                depth,
+                maxDepth,
+                issuedAt,
+                expiresAt,
+                frames,
+                quota,
+                policyDigest,
+                policyOwner,
+                sessionBudget,
+                dataLimits,
+                usageLimits,
+                flowPolicy,
+                java.util.Map.of());
+    }
+
     public GrantDocument(
             String id,
             String issuer,
@@ -67,6 +109,15 @@ public record GrantDocument(
     }
 
     public GrantDocument {
+        toolBindings =
+                toolBindings == null ? java.util.Map.of() : java.util.Map.copyOf(toolBindings);
+        if (toolBindings.size() > 128) throw new IllegalArgumentException("Too many tool bindings");
+        toolBindings.forEach(
+                (name, binding) -> {
+                    Identifiers.require(name);
+                    if (!binding.matches("sha256:[0-9a-f]{64}"))
+                        throw new IllegalArgumentException("Invalid tool binding");
+                });
         Identifiers.require(id);
         Identifiers.require(issuer);
         Identifiers.require(audience);

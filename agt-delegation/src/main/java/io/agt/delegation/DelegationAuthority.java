@@ -75,7 +75,8 @@ public final class DelegationAuthority implements AutoCloseable {
                         exported.usage() == null ? null : exported.usage().limits(),
                         exported.flow() == null
                                 ? null
-                                : GrantCodec.encodeFlowPolicy(exported.flow().policy()));
+                                : GrantCodec.encodeFlowPolicy(exported.flow().policy()),
+                        GrantCodec.toolBindings(source.control().exportAuthorizationPolicy()));
         var lease = LeaseSecrets.create(doc.id());
         registry.registerRoot(
                 doc,
@@ -176,7 +177,8 @@ public final class DelegationAuthority implements AutoCloseable {
                         previous.sessionBudget(),
                         previous.dataLimits(),
                         previous.usageLimits(),
-                        previous.flowPolicy());
+                        previous.flowPolicy(),
+                        previous.toolBindings());
         var token = DelegationJwt.sign(doc, kid, key);
         registry.issue(doc, parent);
         return token;

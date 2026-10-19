@@ -477,6 +477,7 @@ public final class InMemoryGrantRegistry implements GrantRegistry {
                 || !doc.dataLimits().equals(previous.dataLimits())
                 || !Objects.equals(doc.usageLimits(), previous.usageLimits())
                 || !Objects.equals(doc.flowPolicy(), previous.flowPolicy())
+                || !doc.toolBindings().equals(previous.toolBindings())
                 || doc.depth() != previous.depth() + 1
                 || doc.maxDepth() != previous.maxDepth()
                 || doc.expiresAt() > previous.expiresAt()
@@ -524,6 +525,13 @@ public final class InMemoryGrantRegistry implements GrantRegistry {
     public synchronized void commit(
             GrantLease lease, String session, String actionId, String kind, String digest) {
         check(lease, session);
+        if ("tool".equals(kind) && !own(lease).doc.toolBindings().isEmpty())
+            throw new GovernanceException("delegation_tool_binding_required");
+        commitAdmission(lease, session, actionId, kind, digest);
+    }
+
+    private void commitAdmission(
+            GrantLease lease, String session, String actionId, String kind, String digest) {
         var entry = own(lease);
         String grantId = entry.doc.id();
         entry = root(entry);
@@ -602,6 +610,20 @@ public final class InMemoryGrantRegistry implements GrantRegistry {
             Object projection,
             String digest) {
         check(lease, session);
+        if (point == InterventionPoint.PRE_TOOL_CALL && !own(lease).doc.toolBindings().isEmpty())
+            throw new GovernanceException("delegation_tool_binding_required");
+        commitGuarded(lease, session, action, point, tool, projection, digest);
+    }
+
+    private void commitGuarded(
+            GrantLease lease,
+            String session,
+            String action,
+            InterventionPoint point,
+            String tool,
+            Object projection,
+            String digest) {
+        check(lease, session);
         var owner = own(lease);
         var root = root(owner);
         var flow = flow(root);
@@ -650,6 +672,39 @@ public final class InMemoryGrantRegistry implements GrantRegistry {
                         point == InterventionPoint.PRE_DATA_ACCESS
                                 ? dataIdentity(projection)
                                 : null));
+    }
+
+    public synchronized void reviewedCommit(
+            GrantLease lease,
+            String session,
+            String action,
+            String tool,
+            String binding,
+            Object projection,
+            String digest) {
+        check(lease, session);
+        var owner = own(lease);
+        Identifiers.require(tool);
+        if (!Objects.equals(owner.doc.toolBindings().get(tool), binding)
+                || (binding != null && !binding.matches("sha256:[0-9a-f]{64}")))
+            throw new GovernanceException("delegation_tool_binding_denied");
+        if (digest == null || !digest.matches("sha256:[0-9a-f]{64}"))
+            throw new GovernanceException("delegation_action_denied");
+        flowScope(owner, session, action, InterventionPoint.PRE_TOOL_CALL, tool, projection);
+        String boundDigest =
+                JsonValues.digest(Arrays.asList("AGT-REVIEWED-COMMIT-V1", tool, binding, digest));
+        if (root(owner).flow == null) {
+            if (projection != null) throw new GovernanceException("delegation_action_denied");
+            commitAdmission(lease, session, action, "tool", boundDigest);
+        } else
+            commitGuarded(
+                    lease,
+                    session,
+                    action,
+                    InterventionPoint.PRE_TOOL_CALL,
+                    tool,
+                    projection,
+                    boundDigest);
     }
 
     private String dataIdentity(Object target) {

@@ -324,7 +324,10 @@ public final class HostSession implements AutoCloseable {
                                 actionId,
                                 name,
                                 effective,
-                                null,
+                                bound.value() instanceof io.agt.core.effects.PreparedEffect plan
+                                        ? new io.agt.core.effects.EffectTarget(
+                                                plan.rule(), plan.intent())
+                                        : null,
                                 bound.lease().identity()));
             else authority.commit(actionId, point, name, effective);
         }

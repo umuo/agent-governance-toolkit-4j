@@ -89,6 +89,24 @@ public final class HttpGrantStatusClient implements GrantStatusClient {
                 Map.of("sessionId", session, "actionId", action, "kind", kind, "digest", digest));
     }
 
+    public void reviewedCommit(
+            GrantLease lease,
+            String session,
+            String action,
+            String tool,
+            String binding,
+            Object projection,
+            String digest) {
+        var fields = new LinkedHashMap<String, Object>();
+        fields.put("sessionId", session);
+        fields.put("actionId", action);
+        fields.put("tool", tool);
+        fields.put("binding", binding);
+        fields.put("projection", projection);
+        fields.put("digest", digest);
+        command("reviewed_commit", lease, fields);
+    }
+
     public void complete(GrantLease lease, String session) {
         command("complete", lease, Collections.singletonMap("sessionId", session));
     }

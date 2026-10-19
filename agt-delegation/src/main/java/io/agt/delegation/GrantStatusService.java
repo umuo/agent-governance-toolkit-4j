@@ -54,6 +54,14 @@ public final class GrantStatusService {
                         case "flow_validate_action" ->
                                 Set.of("sessionId", "actionId", "point", "tool", "projection");
                         case "flow_complete" -> Set.of("sessionId", "actionId", "tool");
+                        case "reviewed_commit" ->
+                                Set.of(
+                                        "sessionId",
+                                        "actionId",
+                                        "tool",
+                                        "binding",
+                                        "projection",
+                                        "digest");
                         case "commit" -> Set.of("sessionId", "actionId", "kind", "digest");
                         case "work_register" -> Set.of("sessionId", "executionId", "kind");
                         case "work_start", "work_cancel" -> Set.of("sessionId", "executionId");
@@ -174,6 +182,15 @@ public final class GrantStatusService {
                                         "snapshot",
                                         GrantCodec.encodeFlowSnapshot(
                                                 registry.flowSnapshot(lease, session)));
+                case "reviewed_commit" ->
+                        registry.reviewedCommit(
+                                lease,
+                                session,
+                                (String) body.get("actionId"),
+                                (String) body.get("tool"),
+                                (String) body.get("binding"),
+                                body.get("projection"),
+                                (String) body.get("digest"));
                 case "commit" ->
                         registry.commit(
                                 lease,

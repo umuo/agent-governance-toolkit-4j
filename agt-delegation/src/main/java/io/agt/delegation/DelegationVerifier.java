@@ -185,6 +185,7 @@ public final class DelegationVerifier implements AutoCloseable {
             if (!(evaluator instanceof StructuredPolicy structured)
                     || mode != EnforcementMode.ENFORCE
                     || !GrantCodec.policyDigest(structured.document()).equals(doc.policyDigest())
+                    || !GrantCodec.toolBindings(structured.document()).equals(doc.toolBindings())
                     || budget.maxModelCalls() > doc.sessionBudget().maxModelCalls()
                     || budget.maxToolCalls() > doc.sessionBudget().maxToolCalls()
                     || budget.maxDurationMillis() > doc.sessionBudget().maxDurationMillis()
@@ -258,6 +259,34 @@ public final class DelegationVerifier implements AutoCloseable {
 
         public void commit(
                 String actionId, InterventionPoint point, String toolName, Object effective) {
+            if (point == InterventionPoint.PRE_TOOL_CALL
+                    && doc.toolBindings().containsKey(toolName))
+                throw new GovernanceException("delegation_tool_binding_required");
+            commitAction(actionId, point, toolName, effective, null, null);
+        }
+
+        public void commit(PolicyRequest request) {
+            validate(request);
+            if (request.point() != InterventionPoint.PRE_TOOL_CALL
+                    || !Objects.equals(
+                            doc.toolBindings().get(request.toolName()), request.toolBinding()))
+                throw new GovernanceException("delegation_tool_binding_denied");
+            commitAction(
+                    request.actionId(),
+                    request.point(),
+                    request.toolName(),
+                    request.target(),
+                    request.toolBinding(),
+                    request.effect() == null ? null : request.effect().identity());
+        }
+
+        private void commitAction(
+                String actionId,
+                InterventionPoint point,
+                String toolName,
+                Object effective,
+                String binding,
+                String effect) {
             checkActive();
             String kind =
                     switch (point) {
@@ -275,9 +304,27 @@ public final class DelegationVerifier implements AutoCloseable {
                                     toolName == null ? "" : toolName,
                                     "effective",
                                     Collections.singletonList(effective)));
+            if (binding != null || effect != null)
+                digest =
+                        JsonValues.digest(
+                                Arrays.asList("AGT-BOUND-ACTION-V1", digest, binding, effect));
+            final String actionDigest = digest;
             call(
                     () -> {
-                        if (flow == null) registry.commit(lease, sessionId, actionId, kind, digest);
+                        if (point == InterventionPoint.PRE_TOOL_CALL
+                                && !doc.toolBindings().isEmpty())
+                            registry.reviewedCommit(
+                                    lease,
+                                    sessionId,
+                                    actionId,
+                                    toolName,
+                                    binding,
+                                    flow == null
+                                            ? null
+                                            : flow.projection(point, toolName, effective),
+                                    actionDigest);
+                        else if (flow == null)
+                            registry.commit(lease, sessionId, actionId, kind, actionDigest);
                         else
                             registry.guardedCommit(
                                     lease,
@@ -286,7 +333,7 @@ public final class DelegationVerifier implements AutoCloseable {
                                     point,
                                     toolName,
                                     flow.projection(point, toolName, effective),
-                                    digest);
+                                    actionDigest);
                         return null;
                     });
         }

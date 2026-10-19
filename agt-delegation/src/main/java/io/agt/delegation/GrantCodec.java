@@ -76,7 +76,8 @@ public final class GrantCodec {
             BudgetLimits sessionBudget,
             DataLimits dataLimits,
             UsageLimits usageLimits,
-            String flowPolicy) {}
+            String flowPolicy,
+            Map<String, String> toolBindings) {}
 
     public static String encode(GrantDocument grant) {
         var frames = frames(grant.frames());
@@ -99,8 +100,11 @@ public final class GrantCodec {
                         grant.sessionBudget(),
                         grant.dataLimits(),
                         grant.usageLimits(),
-                        grant.flowPolicy());
-        return JsonValues.write(JSON.convertValue(doc, Object.class));
+                        grant.flowPolicy(),
+                        grant.toolBindings());
+        var encoded = JSON.convertValue(doc, java.util.LinkedHashMap.class);
+        if (grant.toolBindings().isEmpty()) encoded.remove("toolBindings");
+        return JsonValues.write(encoded);
     }
 
     private static List<Frame> frames(List<AuthorityFrame> lineage) {
@@ -176,7 +180,8 @@ public final class GrantCodec {
                     doc.sessionBudget(),
                     doc.dataLimits(),
                     doc.usageLimits(),
-                    doc.flowPolicy());
+                    doc.flowPolicy(),
+                    doc.toolBindings());
         } catch (RuntimeException invalid) {
             throw new GovernanceException("delegation_document_denied");
         }
@@ -313,6 +318,16 @@ public final class GrantCodec {
         } catch (RuntimeException invalid) {
             throw new GovernanceException("delegation_document_denied");
         }
+    }
+
+    public static Map<String, String> toolBindings(StructuredPolicy.Document policy) {
+        var bindings = new LinkedHashMap<String, String>();
+        policy.tools()
+                .forEach(
+                        (name, rule) -> {
+                            if (rule.binding() != null) bindings.put(name, rule.binding());
+                        });
+        return Map.copyOf(bindings);
     }
 
     public static String policyDigest(StructuredPolicy.Document policy) {

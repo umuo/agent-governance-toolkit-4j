@@ -1,0 +1,61 @@
+{
+  "verifiedAt": "2026-10-19",
+  "scope": "Signed tool binding manifest, metadata-only authoritative reviewed commit, local artifact pins and native effect tools across JVM/HTTP/JDBC; not publisher attestation or global release revocation",
+  "verification": {
+    "fullReactor": {
+      "command": "mvn -B -ntp verify",
+      "javaVersion": 17,
+      "build": "SUCCESS",
+      "tests": 887,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 1,
+      "passed": 886,
+      "moduleTests": {
+        "agt-approval-jdbc": 22,
+        "agt-observability": 6,
+        "agt-delegation": 66,
+        "agt-audit-jdbc": 21,
+        "examples-live": 153,
+        "agt-langchain4j": 296,
+        "agt-effects-jdbc": 21,
+        "agt-identity": 19,
+        "agt-provenance": 22,
+        "agt-delegation-jdbc": 20,
+        "agt-langchain4j-spring-boot-starter": 10,
+        "agt-sandbox": 50,
+        "agt-core": 181
+      },
+      "finishedAt": "2026-10-19T15:53:27+08:00",
+      "skipReason": "Optional real-provider test is not enabled"
+    },
+    "targeted": {
+      "command": "mvn -pl agt-langchain4j -am -Dtest=ReviewedRemoteProcessTest,ReviewedDelegationTest,ReviewedEffectToolTest,JdbcGrantRegistryTest -Dsurefire.failIfNoSpecifiedTests=false spotless:apply test",
+      "build": "SUCCESS",
+      "tests": 31,
+      "errors": 0,
+      "failures": 0,
+      "skipped": 0
+    },
+    "documentation": {
+      "command": "mkdocs build --strict",
+      "build": "SUCCESS"
+    },
+    "testHarness": "Cross-JVM async await covers multiple bounded HTTP/JDBC operations; production RPC timeout and grant lease duration were not extended."
+  },
+  "requirements": [
+    "Bound manifest inherited and signed with complete policy; receiver checks exact match",
+    "Old commit endpoints cannot bypass nonempty tool manifest",
+    "Reviewed and explicit unbound tools use one version-aware quota path",
+    "Commit retry is idempotent across checkpoint restore; changed fingerprint denied",
+    "Data-flow and shared quota remain atomic with version admission",
+    "Legacy endpoints deny instead of downgrading; old empty-manifest grants retain digest",
+    "Independent SDK JVMs share persistent effects and quota; business mutates once"
+  ],
+  "remaining": [
+    "Persistent reviewed release catalog and global revocation",
+    "Credential proxy",
+    "Publisher and remote binary attestation",
+    "Production platform and storage verification"
+  ]
+}
