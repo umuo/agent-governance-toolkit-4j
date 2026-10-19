@@ -96,6 +96,7 @@ SDK 在 future 完成后关闭该会话；具体取消、并发与执行器约�
 - [架构、扩展契约与选型](docs/architecture.md)
 - [异步与并发工具指南](docs/async-guide.md)
 - [流式使用指南](docs/streaming-guide.md)
+- [流式增量护栏需求（待实现）](docs/streaming-guardrails-requirements.md)
 - [RAG 与记忆访问权限](docs/data-guide.md)
 - [当前验收与边界](docs/sandbox-verification.md)
 - [本地沙箱 SDK 接入调研与维护需求](docs/sandbox-integration-review.md)

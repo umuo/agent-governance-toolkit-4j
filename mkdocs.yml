@@ -25,6 +25,7 @@ nav:
       - 原生边界与资源优化: native-optimization-requirements.md
       - 异步需求: async-requirements.md
       - 流式需求: streaming-requirements.md
+      - 流式增量护栏需求（待实现）: streaming-guardrails-requirements.md
       - 数据权限需求: data-requirements.md
       - 固定命令需求: command-requirements.md
       - 沙箱接入需求: sandbox-requirements.md
