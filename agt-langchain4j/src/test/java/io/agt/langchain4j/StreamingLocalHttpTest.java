@@ -69,6 +69,77 @@ class StreamingLocalHttpTest {
     }
 
     @Test
+    void guardedOfficialSseRejectsSplitLiteralAndAttemptsTransportCancellation() throws Exception {
+        var disconnected = new java.util.concurrent.CountDownLatch(1);
+        var stop = new java.util.concurrent.CountDownLatch(1);
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext(
+                "/v1/chat/completions",
+                exchange -> {
+                    exchange.getRequestBody().readAllBytes();
+                    exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
+                    exchange.sendResponseHeaders(200, 0);
+                    try (var out = exchange.getResponseBody()) {
+                        for (String text : List.of("普通文本足够长ABC", "DEF后续")) {
+                            out.write(
+                                    chunk(Map.of("content", text), null)
+                                            .getBytes(StandardCharsets.UTF_8));
+                            out.flush();
+                        }
+                        // Keep the stream alive: cancellation is observable as a closed HTTP body.
+                        for (int i = 0; i < 100 && stop.getCount() > 0; i++) {
+                            out.write(
+                                    chunk(Map.of("content", "late".repeat(1024)), null)
+                                            .getBytes(StandardCharsets.UTF_8));
+                            out.flush();
+                            try {
+                                stop.await(10, TimeUnit.MILLISECONDS);
+                            } catch (InterruptedException interrupted) {
+                                Thread.currentThread().interrupt();
+                                break;
+                            }
+                        }
+                    } catch (java.io.IOException cancelled) {
+                        disconnected.countDown();
+                    } finally {
+                        exchange.close();
+                    }
+                });
+        server.start();
+        try (var control =
+                AgentControl.builder(
+                                StructuredPolicy.builder("guarded-sse")
+                                        .content(GuardedStreamingTest.LOCAL)
+                                        .build())
+                        .audit(r -> {})
+                        .build()) {
+            var model =
+                    OpenAiStreamingChatModel.builder()
+                            .baseUrl("http://127.0.0.1:" + server.getAddress().getPort() + "/v1")
+                            .apiKey("local-test")
+                            .modelName("local")
+                            .build();
+            var service =
+                    new LangChain4jGovernance(control, GuardedStreamingTest.options())
+                            .create(
+                                    Assistant.class,
+                                    () -> NativeIntegrationTest.CTX,
+                                    b -> b.streamingChatModel(model));
+            var stream = LangChain4jGovernance.buffered(service.chat("hello"));
+            var parts = new CopyOnWriteArrayList<String>();
+            stream.onPartialResponse(parts::add).ignoreErrors().start();
+            org.junit.jupiter.api.Assertions.assertThrows(
+                    java.util.concurrent.ExecutionException.class,
+                    () -> stream.completion().get(5, TimeUnit.SECONDS));
+            assertTrue("普通文本足够长".startsWith(String.join("", parts)));
+            assertTrue(disconnected.await(5, TimeUnit.SECONDS));
+        } finally {
+            stop.countDown();
+            server.stop(0);
+        }
+    }
+
+    @Test
     void officialSseToolLoopDeliversOnlyRewrittenFinal() throws Exception {
         var requests = new CopyOnWriteArrayList<String>();
         var tools = new Tools();

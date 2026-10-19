@@ -6,6 +6,8 @@ import io.agt.core.audit.AuditRecord;
 import io.agt.core.data.DataLimits;
 import io.agt.core.data.DataOperation;
 import io.agt.core.data.DataResource;
+import io.agt.core.streaming.ChunkBufferEngine;
+import io.agt.core.streaming.ChunkBufferOptions;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
@@ -49,6 +51,7 @@ public final class HostSession implements AutoCloseable {
     private boolean asyncRun;
     private final Map<String, Consumer<String>> asyncCalls = new ConcurrentHashMap<>();
     private ScheduledFuture<?> deadline;
+    private final ThreadLocal<String> actionBinding = new ThreadLocal<>();
     private int modelCalls;
     private int toolCalls;
     private int dataCalls;
@@ -504,6 +507,74 @@ public final class HostSession implements AutoCloseable {
                             InterventionPoint.PRE_DATA_ACCESS,
                             e instanceof GovernanceException g ? g.code() : "data_access_failed"));
         }
+    }
+
+    <T> T withinAction(String actionId, Supplier<T> call) {
+        String previous = actionBinding.get();
+        actionBinding.set(actionId);
+        try {
+            return call.get();
+        } finally {
+            if (previous == null) actionBinding.remove();
+            else actionBinding.set(previous);
+        }
+    }
+
+    /** Action executing on this thread; used to associate local gates with model audit. */
+    public String currentActionId() {
+        String action = actionBinding.get();
+        if (action == null) throw new GovernanceException("missing_operation");
+        return action;
+    }
+
+    /** Creates an isolated local gate without consuming model or tool budget. */
+    public ChunkBufferEngine chunkBuffer(
+            ChunkBufferOptions options,
+            String roundId,
+            Consumer<String> output,
+            Consumer<Throwable> failure) {
+        checkActive();
+        Identifiers.require(roundId);
+        var rules = control.streamingRules(options);
+        var lifecycle = new CompletableFuture<Void>();
+        var engine =
+                new ChunkBufferEngine(
+                        options,
+                        rules,
+                        control.deadlines,
+                        control.mode == EnforcementMode.ENFORCE,
+                        (rule, offset, end, nanos) -> {
+                            try (var scope = bind()) {
+                                checkActive();
+                                emit(
+                                        InterventionPoint.POST_MODEL_CALL,
+                                        roundId,
+                                        rule == null ? "ALLOW" : "DENY",
+                                        rule == null ? "stream_local_checked" : rule,
+                                        false,
+                                        "not_requested",
+                                        "stream_local",
+                                        null,
+                                        null,
+                                        nanos,
+                                        List.of(
+                                                "stage=stream_local",
+                                                "offset=" + offset,
+                                                "endOffset=" + end));
+                            }
+                        },
+                        text -> {
+                            try (var scope = bind()) {
+                                checkActive();
+                                output.accept(text);
+                            }
+                        },
+                        failure,
+                        control.workers,
+                        () -> lifecycle.complete(null));
+        lifecycle.whenComplete((value, error) -> engine.close());
+        watchTermination(lifecycle);
+        return engine;
     }
 
     public Object evaluate(

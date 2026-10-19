@@ -1,0 +1,61 @@
+{
+  "date": "2026-10-19",
+  "scope": "Full Maven reactor; no paid remote model calls",
+  "jdks": [
+    {
+      "version": "17.0.13",
+      "command": "clean verify",
+      "result": "SUCCESS"
+    },
+    {
+      "version": "21.0.7",
+      "command": "clean verify",
+      "result": "SUCCESS"
+    }
+  ],
+  "modules": [
+    {
+      "module": "agt-core",
+      "tests": 81,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "agt-langchain4j",
+      "tests": 219,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 1
+    },
+    {
+      "module": "agt-langchain4j-spring-boot-starter",
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "agt-sandbox",
+      "tests": 48,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "examples-live",
+      "tests": 135,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 1
+    }
+  ],
+  "spotless": "PASS",
+  "mkdocsStrict": "PASS",
+  "diffCheck": "PASS",
+  "limits": [
+    "Literal deny rules only; no semantic slow lane, regex or streaming transforms",
+    "Single local benchmark observation; production load testing not performed",
+    "Finite race tests are not an exhaustive concurrency proof"
+  ]
+}

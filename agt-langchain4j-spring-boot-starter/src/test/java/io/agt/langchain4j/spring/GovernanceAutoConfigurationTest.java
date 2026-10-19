@@ -74,6 +74,48 @@ class GovernanceAutoConfigurationTest {
     }
 
     @Test
+    void guardedPropertiesShareJavaValidationAndServiceOverrides() {
+        var policy =
+                StructuredPolicy.builder("guarded")
+                        .content(
+                                new ContentRule(
+                                        "local",
+                                        Set.of(InterventionPoint.POST_MODEL_CALL),
+                                        List.of("ABCDEF"),
+                                        Map.of()))
+                        .build();
+        runner.withBean(
+                        AgentControl.class,
+                        () -> AgentControl.builder(policy).audit(r -> {}).build())
+                .withBean(TrustedContextResolver.class, () -> () -> IDENTITY)
+                .withPropertyValues(
+                        "agt.langchain4j.delivery=GUARDED",
+                        "agt.langchain4j.guardrails.local-rules=local",
+                        "agt.langchain4j.guardrails.chunk-characters=4",
+                        "agt.langchain4j.guardrails.max-wait=25ms",
+                        "agt.langchain4j.guardrails.max-buffered-characters=128")
+                .run(
+                        context -> {
+                            assertThat(context).hasNotFailed();
+                            var options = context.getBean(AiServiceOptions.class);
+                            assertEquals(StreamDelivery.GUARDED, options.delivery());
+                            assertEquals(4, options.guardrails().chunkCharacters());
+                            assertEquals(
+                                    java.time.Duration.ofMillis(25),
+                                    options.guardrails().maxWait());
+                            assertEquals(Set.of("local"), options.guardrails().localRules());
+                            assertEquals(
+                                    StreamDelivery.REALTIME, AiServiceOptions.DEFAULT.delivery());
+                        });
+        var properties = new GovernanceProperties();
+        properties.setDelivery(StreamDelivery.GUARDED);
+        assertThrows(IllegalArgumentException.class, properties::toOptions);
+        properties.getGuardrails().setLocalRules(Set.of("local"));
+        properties.getGuardrails().setMaxWait(java.time.Duration.ZERO);
+        assertThrows(IllegalArgumentException.class, properties::toOptions);
+    }
+
+    @Test
     void bindsPropertiesAndCallsGovernedBeanWithLazyIdentityAndShutdownAudit() {
         runner.withUserConfiguration(Host.class)
                 .withPropertyValues(

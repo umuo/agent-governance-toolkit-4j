@@ -8,6 +8,8 @@ nav:
       - Spring Boot Starter: spring-boot-guide.md
       - 异步与并发: async-guide.md
       - 严格缓冲流式: streaming-guide.md
+      - 流式增量护栏: guarded-streaming-guide.md
+      - 流式护栏网页案例: streaming-web-cases.md
       - RAG 与记忆权限: data-guide.md
       - 固定命令与 ASI05: command-guide.md
       - 当前沙箱 SDK: sandbox-guide.md
@@ -25,11 +27,12 @@ nav:
       - 原生边界与资源优化: native-optimization-requirements.md
       - 异步需求: async-requirements.md
       - 流式需求: streaming-requirements.md
-      - 流式增量护栏需求（待实现）: streaming-guardrails-requirements.md
+      - 流式增量护栏需求: streaming-guardrails-requirements.md
       - 数据权限需求: data-requirements.md
       - 固定命令需求: command-requirements.md
       - 沙箱接入需求: sandbox-requirements.md
   - 验收:
+      - 流式增量护栏: streaming-guardrails-verification.md
       - 当前 v0.6: sandbox-verification.md
       - v0.6 SDK alpha.1 历史: sandbox-verification-alpha1.md
       - v0.5 固定命令: command-verification.md

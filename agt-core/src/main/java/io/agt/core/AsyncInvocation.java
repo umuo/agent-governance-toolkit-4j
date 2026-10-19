@@ -142,7 +142,7 @@ final class AsyncInvocation<E, T> {
                 }
                 started = true;
             }
-            CompletionStage<T> stage = execute.apply(prepared);
+            CompletionStage<T> stage = session.withinAction(id, () -> execute.apply(prepared));
             if (stage == null) {
                 throw new GovernanceException("missing_async_result");
             }

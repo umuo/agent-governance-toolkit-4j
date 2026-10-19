@@ -83,6 +83,8 @@ public final class LangChain4jGovernance {
     public LangChain4jGovernance(AgentControl control, AiServiceOptions options) {
         this.control = Objects.requireNonNull(control);
         this.options = Objects.requireNonNull(options);
+        if (options.delivery() == StreamDelivery.GUARDED)
+            control.streamingRules(options.guardrails());
         requireVersion(ChatModel.class, "langchain4j-core");
         requireVersion(AiServices.class, "langchain4j");
     }

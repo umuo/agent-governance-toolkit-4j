@@ -71,6 +71,11 @@
         <targetPath>risk-examples</targetPath>
         <includes><include>**/*.java</include></includes>
       </resource>
+      <resource>
+        <directory>src/main/java/io/agt/examples/live/web/streaming</directory>
+        <targetPath>streaming-examples</targetPath>
+        <includes><include>*.java</include></includes>
+      </resource>
     </resources>
     <plugins>
       <plugin>

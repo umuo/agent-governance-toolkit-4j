@@ -2,6 +2,12 @@
 
 ## 未发布 — 原生配置与兼容性扩展
 
+- examples-live 新增三个流式护栏网页案例，直接使用正式 SDK，支持固定分片/真实模型、三种交付模式对比、停止生成及指标/源码查看。
+
+- 新增显式 GUARDED 流式局部字面护栏：Core 有界微批窗口、安全尾部暂存、最大等待、跨块匹配、局部审计及终止清理。
+- 原生 TokenStream、文本 Publisher/Flux 接入同一模型门；Starter 支持 guardrails 属性，默认 REALTIME 和旧 Builder STRICT 保持不变。
+- 完整模型检查后重放权威工具调用事件；GUARDED 提前拒绝输出改写/原生输出护栏配置，保留完整检查并核对最终正文一致性。
+
 - 新增原生 AiServices 配置回调和自动会话 create 入口，保留旧 Builder 和显式会话。
 - 在框架工具注册和记忆初始化扩展点装配治理，保留动态 Provider、立即返回及原生消息/Guardrails 配置。
 - 自动会话覆盖同步、异步、流式/Reactive 完成、取消及未启动过期；现有会话沿用身份和预算。

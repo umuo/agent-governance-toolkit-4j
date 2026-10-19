@@ -4,10 +4,14 @@ import io.agt.core.approval.ApprovalResolver;
 import io.agt.core.audit.AuditRecord;
 import io.agt.core.audit.AuditSink;
 import io.agt.core.data.DataLimits;
+import io.agt.core.policy.ContentRule;
 import io.agt.core.policy.StructuredPolicy;
+import io.agt.core.streaming.ChunkBufferEngine;
+import io.agt.core.streaming.ChunkBufferOptions;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -120,6 +124,44 @@ public final class AgentControl implements AutoCloseable {
         if (!evaluator.interventionPoints().containsAll(points)) {
             throw new GovernanceException("point_not_configured");
         }
+    }
+
+    /** Resolve explicitly selected local rules against the immutable policy. */
+    public List<ContentRule> streamingRules(ChunkBufferOptions options) {
+        checkRuntime();
+        if (!(evaluator instanceof StructuredPolicy policy)) {
+            throw new IllegalArgumentException(
+                    "GUARDED requires a StructuredPolicy with explicit literal rules");
+        }
+        var outputPoints = Set.of(InterventionPoint.POST_MODEL_CALL, InterventionPoint.OUTPUT);
+        if (policy.contentRules().stream()
+                .anyMatch(
+                        r ->
+                                r.points().stream().anyMatch(outputPoints::contains)
+                                        && !r.replacements().isEmpty())) {
+            throw new IllegalArgumentException(
+                    "GUARDED does not support output replacements; use STRICT");
+        }
+        var selected =
+                policy.contentRules().stream()
+                        .filter(r -> options.localRules().contains(r.id()))
+                        .toList();
+        if (selected.size() != options.localRules().size()
+                || selected.stream()
+                        .anyMatch(r -> !r.points().contains(InterventionPoint.POST_MODEL_CALL))) {
+            throw new IllegalArgumentException("local rules must bind to post_model_call");
+        }
+        // Constructor performs shared vocabulary/buffer checks without scheduling any tasks.
+        try (var ignored =
+                new ChunkBufferEngine(
+                        options,
+                        selected,
+                        deadlines,
+                        true,
+                        (r, a, b, n) -> {},
+                        text -> {},
+                        error -> {})) {}
+        return selected;
     }
 
     public HostSession openSession(TrustedContext context) {

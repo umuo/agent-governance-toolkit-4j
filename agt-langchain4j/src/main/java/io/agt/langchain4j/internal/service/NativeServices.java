@@ -260,6 +260,20 @@ public final class NativeServices {
 
         T finish() {
             ((Tools) context.toolService).validateCompensation();
+            if (options.delivery() == io.agt.langchain4j.StreamDelivery.GUARDED) {
+                // Bound both native event/text queues as well as our outer delivery queue.
+                context.streamingBufferSize =
+                        context.streamingBufferSize == null
+                                ? options.publisherPrefetch()
+                                : Math.min(
+                                        context.streamingBufferSize, options.publisherPrefetch());
+            }
+            if (options.delivery() == io.agt.langchain4j.StreamDelivery.GUARDED
+                    && Arrays.stream(context.aiServiceClass.getMethods())
+                            .anyMatch(m -> context.guardrailService().hasOutputGuardrails(m))) {
+                throw new IllegalArgumentException(
+                        "GUARDED cannot combine native output guardrails that may rewrite/retry; use STRICT");
+            }
             boolean streaming =
                     Arrays.stream(context.aiServiceClass.getMethods())
                             .filter(m -> !m.isDefault())
@@ -291,7 +305,8 @@ public final class NativeServices {
                                 control,
                                 context.streamingChatModel,
                                 options.streamingLimits(),
-                                options.delivery());
+                                options.delivery(),
+                                options.guardrails());
             }
             if (context.chatModel != null) {
                 context.chatModel = ModelAdapters.guard(control, context.chatModel);

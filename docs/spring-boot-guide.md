@@ -122,3 +122,21 @@ var service = governance.create(Assistant.class, identitySupplier, strict,
 延迟身份解析、自动关闭审计与原生工具审批允许/拒绝。
 `AiServiceOptionsTest` 验证服务配置隔离、模型与聚合限额、预取、缺模型提前失败和缓存后逐次治理。
 缓存只存公开方法/构造器与服务级 SPI 选择，不缓存参数、身份、输出或策略结果；没有进行吞吐或延迟基准测试。
+
+## 流式局部护栏
+
+正式原生服务可显式选择 GUARDED；所选 ID 必须存在于同一 AgentControl 的 StructuredPolicy，并绑定 post_model_call 的字面拒绝规则。
+
+~~~yaml
+agt:
+  langchain4j:
+    delivery: GUARDED
+    guardrails:
+      local-rules: [local-deny]
+      chunk-characters: 20
+      boundaries: "，。！？\n"
+      max-wait: 50ms
+      max-buffered-characters: 4096
+~~~
+
+属性与 Java `ChunkBufferOptions` 使用同一份校验。服务专属 `AiServiceOptions` 优先于全局默认，可单独选择 STRICT 或另一组局部规则；原生默认仍为 REALTIME。缺失规则、不支持的规则组合及缓冲容量不足均提前失败。保证与限制见 [流式增量护栏](guarded-streaming-guide.md)。

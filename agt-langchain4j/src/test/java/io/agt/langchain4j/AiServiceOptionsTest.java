@@ -70,7 +70,9 @@ class AiServiceOptionsTest {
     }
 
     @ParameterizedTest
-    @EnumSource(StreamDelivery.class)
+    @EnumSource(
+            value = StreamDelivery.class,
+            names = {"REALTIME", "STRICT"})
     void aggregateLimitsAndSelectedPrefetchApplyToPublisher(StreamDelivery mode) throws Exception {
         var source = new PublisherResourceTest.Source(20);
         try (var control =

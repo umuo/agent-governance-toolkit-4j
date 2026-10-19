@@ -1,5 +1,7 @@
 # 严格缓冲流式治理
 
+本页保留旧 Builder 的严格缓冲用法。原生服务的局部字面检查见 [流式增量护栏](guarded-streaming-guide.md)，通过显式 GUARDED 配置启用。
+
 v0.3 支持 LangChain4j 1.20.0 的 handler 模型与 TokenStream 服务入口。产品仍由 AgentControl、策略、可信会话和适配器组成，沿用八个干预点。
 
 ## 接入与演示

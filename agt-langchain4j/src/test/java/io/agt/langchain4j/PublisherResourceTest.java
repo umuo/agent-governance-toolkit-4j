@@ -100,7 +100,9 @@ class PublisherResourceTest {
     }
 
     @ParameterizedTest
-    @EnumSource(StreamDelivery.class)
+    @EnumSource(
+            value = StreamDelivery.class,
+            names = {"REALTIME", "STRICT"})
     void longTextStreamDoesNotKeepOneJsonArrayEntryPerFragment(StreamDelivery mode)
             throws Exception {
         // 超过 JSON 容器 4096 项，但低于流事件 10000 项；不应因重复保存 String 分片失败。
@@ -153,7 +155,9 @@ class PublisherResourceTest {
     }
 
     @ParameterizedTest
-    @EnumSource(StreamDelivery.class)
+    @EnumSource(
+            value = StreamDelivery.class,
+            names = {"REALTIME", "STRICT"})
     void finalOutputStillChecksPatternsAcrossFragmentBoundaries(StreamDelivery mode)
             throws Exception {
         Flow.Publisher<Object> source =

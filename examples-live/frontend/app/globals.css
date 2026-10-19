@@ -84,3 +84,13 @@
 .source-dialog-content summary{font-size:13px;padding:12px 0}
 .source-dialog :focus-visible{outline:2px solid var(--green);outline-offset:3px}
 @media(max-width:720px){.source-dialog{width:calc(100vw - 16px);height:calc(100dvh - 24px);max-height:calc(100dvh - 24px);border-radius:10px}.source-dialog-heading{padding:12px;gap:8px}.source-dialog-heading h2{font-size:13px}.source-dialog-heading button span{display:none}.source-dialog .source-dialog-content{padding:12px}.source-dialog-content pre{padding:14px;font-size:12px}}
+
+.stream-controls,.stream-result{border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:18px;background:var(--paper,#fff)}
+.stream-controls>label{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;font-size:13px}
+.stream-controls select,.stream-controls textarea{font:inherit;padding:10px;border:1px solid var(--line);border-radius:7px;background:transparent;color:inherit;width:100%;max-width:100%}
+.stream-controls fieldset{border:0;padding:0;margin:14px 0}.stream-controls legend{font-size:13px;margin-bottom:8px}.stream-modes{display:flex;flex-wrap:wrap;gap:14px}.stream-modes label{display:flex;align-items:center;gap:6px;font-size:12px}
+.stream-mode-description,.stream-limit,.stream-controls small{font-size:12px;line-height:1.7;color:#647064}.stream-fragments{font-size:12px;line-height:1.8}.stream-fragments code{display:block;white-space:pre-wrap;border-left:3px solid var(--line);margin:6px 0;padding:5px 10px;overflow-wrap:anywhere}
+.stream-result .message-heading{gap:12px;flex-wrap:wrap;font-size:12px}.stream-output{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;max-height:320px;min-height:140px;overflow:auto;line-height:1.9;font-size:14px;padding:16px;border-radius:8px;background:#f4f6ef;margin:14px 0}
+.stream-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px;margin:20px 0}.stream-metrics dt{font-size:11px;color:#647064}.stream-metrics dd{font-size:17px;margin:5px 0 0;font-variant-numeric:tabular-nums}.stream-checks{font:12px/1.9 monospace;padding-left:18px;max-height:200px;overflow:auto}.stream-code,.stream-notice{font-size:13px;padding:10px;border-radius:6px;background:#fff0dc;overflow-wrap:anywhere}
+.streaming-main :focus-visible{outline:2px solid var(--green);outline-offset:3px}
+@media(max-width:720px){.stream-controls,.stream-result{padding:14px}.stream-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.stream-output{max-height:260px;font-size:13px}}

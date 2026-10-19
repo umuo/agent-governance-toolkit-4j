@@ -65,14 +65,17 @@ final class HandlerPublisher implements Flow.Publisher<ChatModelStreamingEvent> 
             }
 
             void add(ChatModelStreamingEvent value) {
+                boolean exceeded = false;
                 synchronized (this) {
                     if (cancelled || terminal || done) return;
                     if (queue.size() >= limits.maxEvents()) {
                         error = new GovernanceException("stream_capacity_exceeded");
                         done = true;
                         queue.clear();
+                        exceeded = true;
                     } else queue.add(value);
                 }
+                if (exceeded) session.refuse("stream_capacity_exceeded");
                 drain();
             }
 
@@ -97,6 +100,10 @@ final class HandlerPublisher implements Flow.Publisher<ChatModelStreamingEvent> 
             }
 
             public void onPartialToolCall(PartialToolCall value, PartialToolCallContext context) {
+                add(value);
+            }
+
+            public void onCompleteToolCall(CompleteToolCall value) {
                 add(value);
             }
 

@@ -1,0 +1,72 @@
+{
+  "charactersPerStream": 1280,
+  "concurrentStreams": 2,
+  "jdk": "17.0.13",
+  "limitations": "Single local smoke run; includes scheduler, audit and framework overhead. Not a production SLA or a load test.",
+  "maxWordLength": 8,
+  "providerChunkCharacters": 16,
+  "providerDelayNanos": 250000,
+  "results": [
+    {
+      "charactersPerSecond": 94899.4616197848,
+      "consumerDelayMs": 0,
+      "elapsedMs": 26.975917,
+      "firstChunkMs": 1.03525,
+      "localChecks": 0,
+      "localDetectionMs": 0.0,
+      "maxLocalWindowCharacters": 0,
+      "mode": "REALTIME"
+    },
+    {
+      "charactersPerSecond": 91801.51508359854,
+      "consumerDelayMs": 0,
+      "elapsedMs": 27.88625,
+      "firstChunkMs": 1.103375,
+      "localChecks": 130,
+      "localDetectionMs": 0.203701,
+      "maxLocalWindowCharacters": 27,
+      "mode": "GUARDED"
+    },
+    {
+      "charactersPerSecond": 96807.89211214212,
+      "consumerDelayMs": 0,
+      "elapsedMs": 26.444125,
+      "firstChunkMs": 26.392083,
+      "localChecks": 0,
+      "localDetectionMs": 0.0,
+      "maxLocalWindowCharacters": 0,
+      "mode": "STRICT"
+    },
+    {
+      "charactersPerSecond": 20008.760398048653,
+      "consumerDelayMs": 1,
+      "elapsedMs": 127.943958,
+      "firstChunkMs": 0.7525,
+      "localChecks": 0,
+      "localDetectionMs": 0.0,
+      "maxLocalWindowCharacters": 0,
+      "mode": "REALTIME"
+    },
+    {
+      "charactersPerSecond": 23109.107856371804,
+      "consumerDelayMs": 1,
+      "elapsedMs": 110.778833,
+      "firstChunkMs": 1.245041,
+      "localChecks": 130,
+      "localDetectionMs": 0.082835,
+      "maxLocalWindowCharacters": 27,
+      "mode": "GUARDED"
+    },
+    {
+      "charactersPerSecond": 92477.75467479565,
+      "consumerDelayMs": 1,
+      "elapsedMs": 27.682333,
+      "firstChunkMs": 26.368291,
+      "localChecks": 0,
+      "localDetectionMs": 0.0,
+      "maxLocalWindowCharacters": 0,
+      "mode": "STRICT"
+    }
+  ],
+  "vocabularyWords": 16
+}

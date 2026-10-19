@@ -5,6 +5,7 @@ import io.agt.core.AgentControl;
 import io.agt.core.GovernanceException;
 import io.agt.core.HostSession;
 import io.agt.core.InterventionPoint;
+import io.agt.core.streaming.ChunkBufferOptions;
 import io.agt.langchain4j.StreamDelivery;
 import io.agt.langchain4j.StreamingLimits;
 import java.util.Objects;
@@ -28,6 +29,20 @@ public final class StreamingAdapters {
             StreamingChatModel model,
             StreamingLimits limits,
             StreamDelivery delivery) {
+        return guard(control, model, limits, delivery, null);
+    }
+
+    public static StreamingChatModel guard(
+            AgentControl control,
+            StreamingChatModel model,
+            StreamingLimits limits,
+            StreamDelivery delivery,
+            ChunkBufferOptions guardrails) {
+        if (delivery == StreamDelivery.GUARDED) {
+            if (guardrails == null)
+                throw new IllegalArgumentException("GUARDED requires local rules");
+            control.streamingRules(guardrails);
+        }
         Objects.requireNonNull(model);
         control.requirePoints(
                 Set.of(InterventionPoint.PRE_MODEL_CALL, InterventionPoint.POST_MODEL_CALL));
@@ -38,7 +53,7 @@ public final class StreamingAdapters {
             throw new GovernanceException("already_governed");
         }
         return new GovernedStreamingChatModel(
-                control, model, Objects.requireNonNull(limits), delivery);
+                control, model, Objects.requireNonNull(limits), delivery, guardrails);
     }
 
     public static BufferedStreamControl buffered(

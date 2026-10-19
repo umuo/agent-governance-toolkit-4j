@@ -155,6 +155,10 @@ public final class StructuredPolicy implements PolicyEvaluator {
         return doc.interventionPoints();
     }
 
+    public List<ContentRule> contentRules() {
+        return doc.contentRules();
+    }
+
     public BudgetLimits budget() {
         return doc.budget();
     }

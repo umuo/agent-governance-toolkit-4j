@@ -68,8 +68,8 @@ final class GovernedPublisher implements Flow.Publisher<Object> {
             boolean singleValue,
             StreamingLimits limits,
             int prefetch) {
-        // 同时校验内部直接调用与公共 Options 入口。
-        var options = new AiServiceOptions(delivery, limits, prefetch);
+        // GUARDED 文本已通过模型门；这里独立校验交付队列容量。
+        var options = new AiServiceOptions(StreamDelivery.REALTIME, limits, prefetch);
         this.limits = options.streamingLimits();
         this.prefetch = options.publisherPrefetch();
         this.session = session;
@@ -347,9 +347,7 @@ final class GovernedPublisher implements Flow.Publisher<Object> {
                 synchronized (this) {
                     source = upstream;
                     int capacity =
-                            delivery == StreamDelivery.REALTIME
-                                    ? prefetch - queue.size()
-                                    : prefetch;
+                            delivery != StreamDelivery.STRICT ? prefetch - queue.size() : prefetch;
                     amount =
                             source != null
                                             && !sourceDone
@@ -388,7 +386,7 @@ final class GovernedPublisher implements Flow.Publisher<Object> {
                 return;
             String snapshot = JsonValues.write(TypedValues.project(value));
             boolean deliver =
-                    delivery == StreamDelivery.REALTIME
+                    delivery != StreamDelivery.STRICT
                             && !(value instanceof AiServiceStreamingEvent.FinalResponseEvent);
             // 保存交付前快照，防止接收方修改原始预览后改变最终检查依据。
             synchronized (this) {

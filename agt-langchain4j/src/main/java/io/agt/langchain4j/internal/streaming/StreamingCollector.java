@@ -16,6 +16,7 @@ import dev.langchain4j.model.chat.response.StreamingHandle;
 import io.agt.core.GovernanceException;
 import io.agt.core.HostSession;
 import io.agt.core.JsonValues;
+import io.agt.core.streaming.ChunkBufferEngine;
 import io.agt.langchain4j.StreamingLimits;
 import io.agt.langchain4j.internal.message.TextProjection;
 import java.util.concurrent.CompletableFuture;
@@ -30,19 +31,25 @@ final class StreamingCollector implements StreamingChatResponseHandler {
     private final HostSession session;
     private final StreamingChatResponseHandler preview;
     private final CompletableFuture<ChatResponse> result = new CompletableFuture<>();
+    private final ChunkBufferEngine guard;
     private volatile StreamingHandle handle;
     private long characters;
     private long events;
     private boolean terminal;
 
     private StreamingCollector(
-            HostSession session, StreamingLimits limits, StreamingChatResponseHandler preview) {
+            HostSession session,
+            StreamingLimits limits,
+            StreamingChatResponseHandler preview,
+            ChunkBufferEngine guard) {
         this.limits = limits;
         this.session = session;
         this.preview = preview;
+        this.guard = guard;
         result.whenComplete(
                 (value, error) -> {
                     if (error != null) {
+                        if (guard != null) guard.close();
                         cancelTransport();
                     }
                 });
@@ -64,7 +71,18 @@ final class StreamingCollector implements StreamingChatResponseHandler {
             ChatRequest request,
             ChatRequestOptions options,
             StreamingChatResponseHandler preview) {
-        var collector = new StreamingCollector(session, limits, preview);
+        return collect(session, model, limits, request, options, preview, null);
+    }
+
+    static CompletableFuture<ChatResponse> collect(
+            HostSession session,
+            StreamingChatModel model,
+            StreamingLimits limits,
+            ChatRequest request,
+            ChatRequestOptions options,
+            StreamingChatResponseHandler preview,
+            ChunkBufferEngine guard) {
+        var collector = new StreamingCollector(session, limits, preview, guard);
         // provider 的入口可能尚未返回；取得 handle 后也必须能立即响应会话终止。
         session.watchTermination(collector.result);
         try {
@@ -124,7 +142,8 @@ final class StreamingCollector implements StreamingChatResponseHandler {
     @Override
     public void onPartialResponse(String text) {
         if (charge(text)) {
-            preview(handler -> handler.onPartialResponse(text));
+            if (guard != null) guard.accept(text);
+            else preview(handler -> handler.onPartialResponse(text));
         }
     }
 
@@ -132,7 +151,8 @@ final class StreamingCollector implements StreamingChatResponseHandler {
     public void onPartialResponse(PartialResponse value, PartialResponseContext context) {
         capture(context.streamingHandle());
         if (charge(value.text())) {
-            preview(handler -> handler.onPartialResponse(value, context));
+            if (guard != null) guard.accept(value.text());
+            else preview(handler -> handler.onPartialResponse(value, context));
         }
     }
 
@@ -209,6 +229,7 @@ final class StreamingCollector implements StreamingChatResponseHandler {
             return;
         }
         try {
+            if (guard != null) guard.seal(response.aiMessage().text());
             String payload = JsonValues.write(TextProjection.message(response.aiMessage()));
             if (charge(payload.length(), true)) {
                 result.complete(response);

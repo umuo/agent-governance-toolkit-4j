@@ -259,7 +259,7 @@ final class BufferedStream implements BufferedStreamControl {
                     || kind.equals("thinking")
                     || kind.equals("tool")
                     || kind.equals("raw")) {
-                if (delivery != StreamDelivery.REALTIME) {
+                if (delivery == StreamDelivery.STRICT) {
                     return;
                 }
                 switch (kind) {

@@ -7,5 +7,7 @@ package io.agt.langchain4j;
  */
 public enum StreamDelivery {
     REALTIME,
+    /** Local literal checks before partial delivery; final checks still apply. */
+    GUARDED,
     STRICT
 }
