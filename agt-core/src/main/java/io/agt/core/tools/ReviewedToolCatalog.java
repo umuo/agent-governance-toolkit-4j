@@ -15,17 +15,32 @@ public final class ReviewedToolCatalog implements AutoCloseable {
     private final int maxArtifactBytes;
     private final Map<String, ToolLease> registrations = new HashMap<>();
     private int retained;
+    private final ToolReviewAuthority authority;
 
     public ReviewedToolCatalog(Collection<ToolDescriptor> reviewed, int maxArtifactBytes) {
+        this(reviewed, maxArtifactBytes, null);
+    }
+
+    public ReviewedToolCatalog(
+            Collection<ToolDescriptor> reviewed,
+            int maxArtifactBytes,
+            ToolReviewAuthority authority) {
+        this.authority = authority;
         if (reviewed.isEmpty()
                 || reviewed.size() > 128
                 || maxArtifactBytes < 1
                 || maxArtifactBytes > 16777216)
             throw new IllegalArgumentException("Invalid bounded tool catalog");
         var snapshot = new LinkedHashMap<String, ToolDescriptor>();
-        for (var descriptor : reviewed)
+        for (var descriptor : reviewed) {
+            if (!Objects.equals(
+                    descriptor.reviewAuthority(),
+                    authority == null ? null : authority.identity())) {
+                throw denied("tool_review_authority_required");
+            }
             if (snapshot.putIfAbsent(descriptor.name(), descriptor) != null)
                 throw new IllegalArgumentException("Duplicate reviewed tool");
+        }
         this.reviewed = Map.copyOf(snapshot);
         this.maxArtifactBytes = maxArtifactBytes;
     }
@@ -65,6 +80,15 @@ public final class ReviewedToolCatalog implements AutoCloseable {
                 || revoked.contains(descriptor.name())
                 || !descriptor.equals(reviewed.get(descriptor.name())))
             throw denied("tool_version_revoked");
+        if (authority != null) {
+            authority.check(descriptor);
+        }
+    }
+
+    void validateContext(TrustedContext context) {
+        if (authority != null) {
+            authority.validateContext(context);
+        }
     }
 
     public void close() {

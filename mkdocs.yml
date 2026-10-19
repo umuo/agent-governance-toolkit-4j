@@ -31,6 +31,7 @@ nav:
       - 已认证身份与撤销: authenticated-identity.md
       - 持久人工审批: durable-approvals.md
       - 工具清单与版本绑定: reviewed-tools.md
+      - 持久工具审核与撤销: durable-tool-releases.md
       - ASI05 网页对照案例: asi05-reproduction-cases.md
   - 需求与架构:
       - 架构与扩展: architecture.md

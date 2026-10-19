@@ -12,6 +12,7 @@
     <module>agt-identity</module>
     <module>agt-audit-jdbc</module>
     <module>agt-approval-jdbc</module>
+    <module>agt-tools-jdbc</module>
     <module>agt-effects-jdbc</module>
     <module>agt-provenance</module>
     <module>agt-delegation</module>

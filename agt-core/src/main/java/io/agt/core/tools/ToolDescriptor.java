@@ -10,8 +10,22 @@ public record ToolDescriptor(
         String version,
         String artifactDigest,
         Map<String, Object> specification,
-        Set<String> permissions) {
+        Set<String> permissions,
+        String reviewAuthority) {
+    public ToolDescriptor(
+            String name,
+            String provider,
+            String version,
+            String artifactDigest,
+            Map<String, Object> specification,
+            Set<String> permissions) {
+        this(name, provider, version, artifactDigest, specification, permissions, null);
+    }
+
     public ToolDescriptor {
+        if (reviewAuthority != null && !reviewAuthority.matches("sha256:[0-9a-f]{64}")) {
+            throw new IllegalArgumentException("Invalid tool review authority");
+        }
         Identifiers.require(name);
         Identifiers.require(provider);
         Identifiers.require(version);
@@ -27,15 +41,20 @@ public record ToolDescriptor(
     }
 
     public String identity() {
-        return JsonValues.digest(
-                List.of(
-                        "AGT-TOOL-DESCRIPTOR-V1",
-                        name,
-                        provider,
-                        version,
-                        artifactDigest,
-                        specification,
-                        permissions.stream().sorted().toList()));
+        String descriptor =
+                JsonValues.digest(
+                        List.of(
+                                "AGT-TOOL-DESCRIPTOR-V1",
+                                name,
+                                provider,
+                                version,
+                                artifactDigest,
+                                specification,
+                                permissions.stream().sorted().toList()));
+        return reviewAuthority == null
+                ? descriptor
+                : JsonValues.digest(
+                        List.of("AGT-TOOL-REVIEW-AUTHORITY-V1", descriptor, reviewAuthority));
     }
 
     public String toString() {

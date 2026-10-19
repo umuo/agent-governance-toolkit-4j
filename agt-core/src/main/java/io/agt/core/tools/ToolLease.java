@@ -39,6 +39,7 @@ public final class ToolLease {
 
     public void validate(TrustedContext context) {
         check();
+        catalog.validateContext(context);
         if (!context.permissions().containsAll(descriptor.permissions()))
             throw ReviewedToolCatalog.denied("tool_version_permission_denied");
     }

@@ -1,0 +1,60 @@
+{
+  "verifiedAt": "2026-10-19",
+  "scope": "Optional JDBC tool review authority, immutable proposals and independent human decisions, durable catalog-wide revocation, authenticated management reads and online SDK checks; not publisher/remote binary attestation or production certification",
+  "verification": {
+    "fullReactor": {
+      "build": "SUCCESS",
+      "command": "mvn -B -ntp verify",
+      "java": 17,
+      "tests": 917,
+      "passed": 916,
+      "skipped": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipReason": "Optional LiveProviderTest: AGT_LIVE_TEST environment variable not set"
+    },
+    "toolReleaseModule": {
+      "tests": 25,
+      "failures": 0,
+      "errors": 0,
+      "includes": [
+        "Independent JVM existing-session revocation",
+        "File database reopen",
+        "Identity and MFA freshness rechecked before commit",
+        "Single-connection pool initialization",
+        "Key rotation and rollback rejection",
+        "Unknown administration outcome reconciliation",
+        "Bounded cancellation and capacity reserved for revocation"
+      ]
+    },
+    "sandboxRegression": {
+      "failureCauseTests": 3,
+      "cancellationReceiptTests": 4,
+      "asi05WebTests": 14,
+      "result": "PASS; original failure reason retained without promoting unknown cleanup to confirmed termination"
+    },
+    "documentation": {
+      "strictBuild": "PASS",
+      "browserReview": "Guide navigation/content and rendered architecture Mermaid verified"
+    },
+    "diffCheck": "PASS"
+  },
+  "requirements": [
+    "Review authority identity is bound to descriptor/policy; local downgrade rejected",
+    "Independent human MFA review with private token-bound view and live authorization",
+    "Same provider/name/version is immutable; rejection and revocation cannot be undone",
+    "Management metadata/body require verified actor and successful access audit",
+    "Runtime checks are bounded and never use stale approvals after cancel/close",
+    "AEAD/HMAC and independent witness reject rollback, deletion and unconfirmed state",
+    "Concurrent initialization/decisions and lost confirmation do not reset or replay business",
+    "Publication capacity reserves room for revocation",
+    "Independent JVM existing session sees shared revoke before business call",
+    "File DB reopen and retained-key rotation preserve approved and revoked versions"
+  ],
+  "remaining": [
+    "Production IdP, SQL dialects, connection pools, independent witness administration and HA",
+    "Publisher signatures, remote deployment and malicious plugin isolation",
+    "Enterprise review workbench and release archival/key destruction",
+    "Credential proxy"
+  ]
+}
