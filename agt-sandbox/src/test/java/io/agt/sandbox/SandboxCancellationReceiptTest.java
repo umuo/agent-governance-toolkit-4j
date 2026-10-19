@@ -19,6 +19,76 @@ class SandboxCancellationReceiptTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
+    void timeoutCauseSurvivesUnknownCleanupReceipt(boolean sdkTimeout) throws Exception {
+        var release = new CountDownLatch(1);
+        var known = SandboxCleanupState.CONFIRMED;
+        var cleanup =
+                new SandboxCleanupResult(SandboxCleanupState.UNKNOWN, known, known, known, true);
+        var sdk =
+                client(
+                        request -> {
+                            if (sdkTimeout) {
+                                throw new SandboxException(
+                                        SandboxErrorCode.TIMEOUT,
+                                        SandboxPhase.EXECUTION,
+                                        "synthetic-timeout");
+                            }
+                            while (release.getCount() != 0) {
+                                try {
+                                    release.await();
+                                } catch (InterruptedException ignored) {
+                                    /* 后台由测试释放，不能假装已停止。 */
+                                }
+                            }
+                            return result("late", "");
+                        },
+                        request -> {},
+                        cleanup);
+        var fixture = new SandboxCommandBackendTest();
+        fixture.directory = directory;
+        try (var backend = SandboxCommandBackend.strict(sdk, fixture.policy(), 1);
+                var control =
+                        AgentControl.builder(StructuredPolicy.builder("timeout-priority").build())
+                                .audit(r -> {})
+                                .build();
+                var session = control.openDetachedSession(identity(true))) {
+            var command =
+                    fixture.command(backend, new CommandLimits(sdkTimeout ? 2000 : 500, 1024, 1));
+            var error =
+                    assertThrows(
+                            GovernanceException.class,
+                            () -> command.execute(Map.of("mode", "old"), session));
+            assertEquals("sandbox_timeout", error.code());
+            release.countDown();
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (session.externalExecutionSnapshot().entries().stream()
+                            .noneMatch(
+                                    e ->
+                                            e.evidence() == TerminationEvidence.WORKER_ONLY
+                                                    || e.evidence() == TerminationEvidence.UNKNOWN)
+                    && System.nanoTime() < deadline) {
+                Thread.sleep(5);
+            }
+            var receipt = session.externalExecutionSnapshot();
+            assertEquals(1, receipt.entries().size());
+            // SDK 自行报告失败时仍沿用 WORKER_ONLY；宿主取消后则必须保留 UNKNOWN。
+            assertEquals(sdkTimeout ? 0 : 1, receipt.unknown());
+            assertEquals(TerminationEvidence.WORKER_ONLY, receipt.entries().get(0).evidence());
+            assertEquals("sandbox_timeout", session.failureCode());
+            assertFalse(session.externalExecutionSnapshot().allTerminationConfirmed());
+            assertThrows(
+                    GovernanceException.class,
+                    () -> command.execute(Map.of("mode", "old"), session));
+            if (!sdkTimeout) {
+                assertThrows(GovernanceException.class, session::checkActive);
+            }
+        } finally {
+            release.countDown();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
     void callerCancellationDoesNotConfirmSdkWorkerOrUnknownProcessCleanup(boolean completeCleanup)
             throws Exception {
         var entered = new CountDownLatch(1);

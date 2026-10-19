@@ -572,7 +572,13 @@ public final class HostSession implements AutoCloseable {
 
     /** 适配器只记录已发生错误的机器原因；实际终止仍由正常失败路径执行。 */
     public synchronized void noteFailureCause(String code) {
-        if (failureCode == null) failureCode = Identifiers.require(code);
+        if (failureCode == null) {
+            // 生命周期终止已先发生时，不能让适配器的迟到清理错误覆盖它。
+            failureCode =
+                    closed
+                            ? "session_closed"
+                            : revoked ? "session_revoked" : Identifiers.require(code);
+        }
     }
 
     public GovernanceException refuse(String code) {

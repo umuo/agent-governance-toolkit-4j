@@ -264,6 +264,7 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
             }
         } catch (InterruptedException error) {
             Thread.currentThread().interrupt();
+            session.noteFailureCause("sandbox_cancelled");
             job.cancel();
             throw new GovernanceException("sandbox_cancelled");
         } catch (ExecutionException error) {
@@ -271,6 +272,10 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
                     ? governance
                     : new GovernanceException("sandbox_execution_failed");
         } catch (RuntimeException error) {
+            session.noteFailureCause(
+                    error instanceof GovernanceException denied
+                            ? denied.code()
+                            : "sandbox_execution_failed");
             job.cancel();
             throw error;
         }
@@ -468,6 +473,10 @@ public final class SandboxCommandBackend implements CommandBackend, AutoCloseabl
                                 : handle.cleanup().confirmed()
                                         ? TerminationEvidence.CONFIRMED
                                         : TerminationEvidence.WORKER_ONLY;
+                // 终止证据与业务错误独立；未知清理不能抢先覆盖已经确定的执行失败。
+                if (failure != null) {
+                    session.noteFailureCause(failure.code());
+                }
                 external.finished(proof);
                 stopped.complete(proof);
                 jobs.remove(this);
